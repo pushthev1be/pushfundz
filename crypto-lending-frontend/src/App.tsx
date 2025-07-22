@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { WagmiProvider, useAccount } from 'wagmi'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { config } from './config/web3'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,9 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Wallet, DollarSign, Users, CreditCard, Clock } from 'lucide-react'
+import { WalletConnect } from './components/WalletConnect'
+import { PointsDisplay } from './components/PointsDisplay'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+const queryClient = new QueryClient()
 
 interface User {
   id: string
@@ -44,7 +51,8 @@ interface PlatformStats {
   total_volume_usd: number
 }
 
-function App() {
+function AppContent() {
+  const { address, isConnected } = useAccount()
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null)
   const [userLoans, setUserLoans] = useState<Loan[]>([])
@@ -340,15 +348,21 @@ function App() {
 
         {!currentUser ? (
           /* Registration Form */
-          <Card className="max-w-md mx-auto">
-            <CardHeader>
-              <CardTitle>Register for PushFundz</CardTitle>
-              <CardDescription>
-                Create your account to start accessing crypto loans with competitive rates based on your credit score.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={registerUser} className="space-y-4">
+          <div className="space-y-6">
+            {!isConnected && (
+              <div className="flex justify-center">
+                <WalletConnect />
+              </div>
+            )}
+            <Card className="max-w-md mx-auto">
+              <CardHeader>
+                <CardTitle>Register for PushFundz</CardTitle>
+                <CardDescription>
+                  Create your account to start accessing crypto loans with competitive rates based on your credit score.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={registerUser} className="space-y-4">
                 <div>
                   <Label htmlFor="name">Full Name</Label>
                   <Input
@@ -372,11 +386,17 @@ function App() {
                   <Label htmlFor="wallet">Crypto Wallet Address</Label>
                   <Input
                     id="wallet"
-                    value={regForm.wallet_address}
+                    value={address || regForm.wallet_address}
                     onChange={(e) => setRegForm({...regForm, wallet_address: e.target.value})}
-                    placeholder="0x..."
+                    placeholder={address ? address : "0x..."}
                     required
+                    disabled={isConnected}
                   />
+                  {isConnected && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✓ Wallet connected automatically
+                    </p>
+                  )}
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Registering...' : 'Register'}
@@ -384,15 +404,23 @@ function App() {
               </form>
             </CardContent>
           </Card>
+          </div>
         ) : (
           /* Main Dashboard */
-          <Tabs defaultValue="dashboard" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-              <TabsTrigger value="request">Request Loan</TabsTrigger>
-              <TabsTrigger value="payment">Make Payment</TabsTrigger>
-              <TabsTrigger value="loans">My Loans</TabsTrigger>
-            </TabsList>
+          <div className="space-y-6">
+            {isConnected && (
+              <div className="flex justify-center">
+                <WalletConnect />
+              </div>
+            )}
+            <Tabs defaultValue="dashboard" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                <TabsTrigger value="request">Request Loan</TabsTrigger>
+                <TabsTrigger value="payment">Make Payment</TabsTrigger>
+                <TabsTrigger value="loans">My Loans</TabsTrigger>
+                <TabsTrigger value="points">Points & Rewards</TabsTrigger>
+              </TabsList>
 
             <TabsContent value="dashboard">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -638,10 +666,37 @@ function App() {
                 )}
               </div>
             </TabsContent>
+
+            <TabsContent value="points">
+              {currentUser ? (
+                <PointsDisplay userId={currentUser.id} />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Points & Rewards</CardTitle>
+                    <CardDescription>Register and connect your wallet to view your trust points</CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-center py-8">
+                    <p className="text-muted-foreground">Please register and connect your wallet to access the points system</p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
           </Tabs>
+          </div>
         )}
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WagmiProvider config={config}>
+        <AppContent />
+      </WagmiProvider>
+    </QueryClientProvider>
   )
 }
 

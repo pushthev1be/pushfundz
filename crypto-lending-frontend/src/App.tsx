@@ -14,6 +14,7 @@ import { WalletConnect } from './components/WalletConnect'
 import { PointsDisplay } from './components/PointsDisplay'
 import { AdminDashboard } from './components/AdminDashboard'
 import { useIsMobile } from './hooks/use-mobile'
+import { isValidWalletAddress, getAddressType } from './utils/walletValidation'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -143,6 +144,14 @@ function AppContent() {
     wallet_address: ''
   })
 
+  const [loginForm, setLoginForm] = useState({
+    email: '',
+    wallet_address: ''
+  })
+
+  const [isLoginMode, setIsLoginMode] = useState(false)
+  const [walletError, setWalletError] = useState('')
+
   const [loanForm, setLoanForm] = useState({
     amount_usd: '',
     duration_days: '30',
@@ -201,6 +210,37 @@ function AppContent() {
       setUserLoans(userData.loans)
       
       setRegForm({ name: '', email: '', wallet_address: '' })
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loginUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(`${API_URL}/api/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm)
+      })
+
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.detail || 'Login failed')
+      }
+
+      setSuccess('Login successful!')
+      setCurrentUser(data.user)
+      setUserLoans(data.loans)
+      
+      setLoginForm({ email: '', wallet_address: '' })
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -611,23 +651,69 @@ function AppContent() {
             </section>
 
             <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="flex items-center mb-6">
-                <span className="text-2xl mr-3">📝</span>
-                <h2 className="text-xl font-semibold text-white">Register for PushFundz</h2>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <span className="text-2xl mr-3">{isLoginMode ? '🔑' : '📝'}</span>
+                  <h2 className="text-xl font-semibold text-white">{isLoginMode ? 'Login to PushFundz' : 'Register for PushFundz'}</h2>
+                </div>
+                <button 
+                  onClick={() => setIsLoginMode(!isLoginMode)}
+                  className="text-cyan-400 hover:text-cyan-300 text-sm underline"
+                >
+                  {isLoginMode ? 'Need an account?' : 'Already have an account?'}
+                </button>
               </div>
-              <p className="text-slate-400 text-sm mb-6">Create your account to start accessing crypto loans with competitive rates based on your credit score.</p>
-              <form onSubmit={registerUser} className="space-y-4">
-                <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Full Name" 
-                  value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} required />
-                <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Email Address" type="email"
-                  value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} required />
-                <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Wallet Address"
-                  value={address || regForm.wallet_address} onChange={(e) => setRegForm({...regForm, wallet_address: e.target.value})} 
-                  disabled={isConnected} required />
-                <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
-                  {loading ? 'Registering...' : 'Register'}
-                </Button>
-              </form>
+              
+              <p className="text-slate-400 text-sm mb-6">
+                {isLoginMode 
+                  ? 'Welcome back! Login with your email or wallet address.' 
+                  : 'Create your account to start accessing crypto loans with competitive rates based on your credit score.'
+                }
+              </p>
+              
+              {isLoginMode ? (
+                <form onSubmit={loginUser} className="space-y-4">
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} 
+                    placeholder="Email Address" type="email"
+                    value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} />
+                  
+                  <div className="text-center text-slate-400 text-sm">OR</div>
+                  
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} 
+                    placeholder="Wallet Address"
+                    value={loginForm.wallet_address} onChange={(e) => setLoginForm({...loginForm, wallet_address: e.target.value})} />
+                  
+                  <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
+                    {loading ? 'Logging in...' : 'Login'}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={registerUser} className="space-y-4">
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Full Name" 
+                    value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} required />
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Email Address" type="email"
+                    value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} required />
+                  <div>
+                    <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''} ${walletError ? 'border-red-500' : ''}`} 
+                      placeholder="Wallet Address (Ethereum, Bitcoin, or Solana)"
+                      value={address || regForm.wallet_address} 
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setRegForm({...regForm, wallet_address: value});
+                        if (value && !isValidWalletAddress(value)) {
+                          setWalletError(`Invalid wallet address format. Detected: ${getAddressType(value)}`);
+                        } else {
+                          setWalletError('');
+                        }
+                      }} 
+                      disabled={isConnected} required />
+                    {walletError && <p className="text-red-400 text-sm mt-1">{walletError}</p>}
+                  </div>
+                  <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading || !!walletError}>
+                    {loading ? 'Registering...' : 'Register'}
+                  </Button>
+                </form>
+              )}
             </section>
           </div>
         ) : (

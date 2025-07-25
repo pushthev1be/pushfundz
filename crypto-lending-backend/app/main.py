@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
 import httpx
+import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -67,6 +68,24 @@ class Loan(BaseModel):
 class UserRegistration(BaseModel):
     name: str
     email: str
+    wallet_address: Optional[str] = None
+    
+    @validator('wallet_address')
+    def validate_wallet_address(cls, v):
+        if v is None:
+            return v
+        
+        if re.match(r'^0x[a-fA-F0-9]{40}$', v):
+            return v
+        if re.match(r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$', v) or re.match(r'^bc1[a-z0-9]{39,59}$', v):
+            return v
+        if re.match(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$', v):
+            return v
+            
+        raise ValueError('Invalid wallet address format')
+
+class UserLogin(BaseModel):
+    email: Optional[str] = None
     wallet_address: Optional[str] = None
 
 class PaymentRequest(BaseModel):
@@ -155,6 +174,44 @@ async def register_user(user_data: UserRegistration, db: Session = Depends(get_d
     db.refresh(new_user)
     
     return {"user_id": str(new_user.id), "message": "User registered successfully", "credit_score": 600}
+
+@app.post("/api/users/login")
+async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
+    """Login user with email or wallet address"""
+    if not login_data.email and not login_data.wallet_address:
+        raise HTTPException(status_code=400, detail="Email or wallet address required")
+    
+    user = None
+    if login_data.email:
+        user = db.query(DBUser).filter(DBUser.email == login_data.email).first()
+    elif login_data.wallet_address:
+        user = db.query(DBUser).filter(DBUser.wallet_address == login_data.wallet_address).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user_loans = db.query(DBLoan).filter(DBLoan.user_id == user.id).all()
+    
+    return {
+        "user": {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "wallet_address": user.wallet_address,
+            "credit_score": user.credit_score,
+            "fiat_balance": user.fiat_balance,
+            "tier": user.tier,
+            "created_at": user.created_at
+        },
+        "loans": [{
+            "id": str(loan.id),
+            "amount": loan.loan_amount,
+            "status": loan.status,
+            "created_at": loan.created_at,
+            "due_date": loan.due_date
+        } for loan in user_loans],
+        "message": "Login successful"
+    }
 
 @app.get("/api/users/{user_id}")
 async def get_user(user_id: str, db: Session = Depends(get_db)):

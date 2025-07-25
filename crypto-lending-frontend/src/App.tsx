@@ -56,10 +56,10 @@ interface PlatformStats {
 
 function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="bg-white rounded-xl p-4 shadow flex flex-col items-center">
-      <span className="text-3xl mb-2">{icon}</span>
-      <span className="text-lg font-bold">{value}</span>
-      <span className="text-sm text-gray-500">{label}</span>
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 flex flex-col items-center group">
+      <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{icon}</div>
+      <div className="text-2xl font-bold text-white mb-1">{value}</div>
+      <div className="text-sm text-slate-400">{label}</div>
     </div>
   );
 }
@@ -79,23 +79,25 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
   const isMobile = useIsMobile();
   
   return (
-    <div className="border rounded-xl p-4 flex flex-col justify-between">
-      <div className="text-2xl mb-2">{icon}</div>
-      <h3 className="text-lg font-bold mb-2">{title}</h3>
-      <p className="text-sm text-gray-600 mb-3">{description}</p>
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 flex flex-col justify-between group">
+      <div>
+        <div className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-300">{icon}</div>
+        <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+        <p className="text-sm text-slate-400 mb-4">{description}</p>
+      </div>
       {buttons ? (
-        <div className={`${isMobile ? 'flex flex-col space-y-2' : 'space-x-2'}`}>
+        <div className={`${isMobile ? 'flex flex-col space-y-2' : 'grid grid-cols-3 gap-2'}`}>
           {buttons.map((b) => (
-            <button key={b} onClick={() => onAction(b)} className="bg-gray-100 hover:bg-gray-200 text-sm px-3 py-2 rounded w-full">
+            <button key={b} onClick={() => onAction(b)} className="bg-slate-700/50 hover:bg-gradient-to-r hover:from-cyan-500 hover:to-blue-500 text-white text-sm px-4 py-3 rounded-xl transition-all duration-300 hover:scale-105 border border-slate-600/50 hover:border-transparent">
               {b}
             </button>
           ))}
         </div>
       ) : (
-        <>
+        <div className="space-y-3">
           {inputPlaceholder && (
             <Input 
-              className={`border p-2 rounded w-full mb-2 ${isMobile ? 'py-3 text-lg' : ''}`} 
+              className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} 
               placeholder={inputPlaceholder}
               value={inputValue}
               onChange={(e) => onInputChange?.(e.target.value)}
@@ -103,11 +105,11 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
             />
           )}
           {actionLabel && (
-            <Button onClick={() => onAction()} className={`bg-blue-500 text-white px-3 py-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`}>
+            <Button onClick={() => onAction()} className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`}>
               {actionLabel}
             </Button>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -115,8 +117,9 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
 
 function WalletButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="border px-4 py-2 rounded w-full mb-2 hover:bg-gray-100 flex items-center justify-center">
-      <span className="mr-2">💼</span> {label}
+    <button onClick={onClick} className="bg-slate-700/50 hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 border border-slate-600/50 hover:border-cyan-500/50 px-6 py-4 rounded-xl w-full mb-3 text-white transition-all duration-300 hover:scale-105 flex items-center justify-center group">
+      <span className="mr-3 text-xl group-hover:scale-110 transition-transform duration-300">💼</span> 
+      <span className="font-medium">{label}</span>
     </button>
   );
 }
@@ -459,20 +462,24 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-2">
-              <Wallet className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">PushFundz</h1>
-              <span className="text-sm text-gray-500">Crypto Lending Platform</span>
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl flex items-center justify-center">
+                <Wallet className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white">PushFundz</h1>
+                <span className="text-sm text-slate-400">Crypto Lending Platform</span>
+              </div>
             </div>
             {currentUser && (
               <div className="flex items-center space-x-4">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">{currentUser.name}</p>
+                  <p className="text-sm font-medium text-white">{currentUser.name}</p>
                   <p className={`text-sm font-semibold ${getCreditScoreColor(currentUser.credit_score)}`}>
                     Credit Score: {currentUser.credit_score}
                   </p>
@@ -486,11 +493,17 @@ function AppContent() {
       <main className={`max-w-7xl mx-auto py-8 ${isMobile ? 'px-4' : 'px-4 sm:px-6 lg:px-8'}`}>
         {/* Stats Overview */}
         {platformStats && (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
-            <StatCard label="Total Users" value={platformStats.total_users.toString()} icon="👤" />
-            <StatCard label="Total Loans" value={platformStats.total_loans.toString()} icon="💳" />
-            <StatCard label="Active Loans" value={platformStats.active_loans.toString()} icon="⏳" />
-            <StatCard label="Total Volume" value={`$${platformStats.total_volume_usd.toLocaleString()}`} icon="💰" />
+          <div className="mb-8">
+            <div className="flex items-center mb-6">
+              <h2 className="text-2xl font-bold text-white mr-3">Platform Overview</h2>
+              <div className="h-px bg-gradient-to-r from-cyan-500 to-transparent flex-1"></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <StatCard label="Total Users" value={platformStats.total_users.toString()} icon="👤" />
+              <StatCard label="Total Loans" value={platformStats.total_loans.toString()} icon="💳" />
+              <StatCard label="Active Loans" value={platformStats.active_loans.toString()} icon="⏳" />
+              <StatCard label="Total Volume" value={`$${platformStats.total_volume_usd.toLocaleString()}`} icon="💰" />
+            </div>
           </div>
         )}
 
@@ -552,48 +565,58 @@ function AppContent() {
 
         {!currentUser ? (
           /* Registration Form */
-          <div className="grid md:grid-cols-2 gap-4">
-            <section className="bg-white rounded-2xl p-4 shadow-md">
-              <h2 className="text-lg font-semibold mb-4">🔗 Connect Wallet</h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="flex items-center mb-6">
+                <span className="text-2xl mr-3">🔗</span>
+                <h2 className="text-xl font-semibold text-white">Connect Wallet</h2>
+              </div>
               {!isConnected ? (
-                <div className="space-y-2">
-                  <WalletButton label="Injected" onClick={() => {
-                    const connector = connectors.find(c => c.name === 'Injected');
-                    if (connector) connect({ connector });
-                  }} />
-                  <WalletButton label="MetaMask" onClick={() => {
-                    const connector = connectors.find(c => c.name === 'MetaMask');
-                    if (connector) connect({ connector });
-                  }} />
-                  <WalletButton label="Coinbase Wallet" onClick={() => {
-                    const connector = connectors.find(c => c.name === 'Coinbase Wallet');
-                    if (connector) connect({ connector });
-                  }} />
-                  <WalletButton label="WalletConnect" onClick={() => {
-                    const connector = connectors.find(c => c.name === 'WalletConnect');
-                    if (connector) connect({ connector });
-                  }} />
+                <div>
+                  <p className="text-slate-400 text-sm mb-4">Connect your crypto wallet to access lending features</p>
+                  <div className="space-y-2">
+                    <WalletButton label="Injected" onClick={() => {
+                      const connector = connectors.find(c => c.name === 'Injected');
+                      if (connector) connect({ connector });
+                    }} />
+                    <WalletButton label="MetaMask" onClick={() => {
+                      const connector = connectors.find(c => c.name === 'MetaMask');
+                      if (connector) connect({ connector });
+                    }} />
+                    <WalletButton label="Coinbase Wallet" onClick={() => {
+                      const connector = connectors.find(c => c.name === 'Coinbase Wallet');
+                      if (connector) connect({ connector });
+                    }} />
+                    <WalletButton label="WalletConnect" onClick={() => {
+                      const connector = connectors.find(c => c.name === 'WalletConnect');
+                      if (connector) connect({ connector });
+                    }} />
+                  </div>
                 </div>
               ) : (
-                <div className="text-center">
-                  <p className="text-sm text-green-600 mb-2">✓ Wallet Connected</p>
-                  <p className="text-xs text-gray-600">{address}</p>
+                <div className="text-center p-6 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl border border-green-500/20">
+                  <div className="text-3xl mb-2">✓</div>
+                  <p className="text-green-400 font-medium mb-2">Wallet Connected</p>
+                  <p className="text-xs text-slate-400 font-mono">{address}</p>
                 </div>
               )}
             </section>
 
-            <section className="bg-white rounded-2xl p-4 shadow-md">
-              <h2 className="text-lg font-semibold mb-4">📝 Register for PushFundz</h2>
-              <p className="text-sm mb-4">Create your account to start accessing crypto loans with competitive rates based on your credit score.</p>
-              <form onSubmit={registerUser} className="space-y-3">
-                <Input className={`border p-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} placeholder="Full Name" 
+            <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="flex items-center mb-6">
+                <span className="text-2xl mr-3">📝</span>
+                <h2 className="text-xl font-semibold text-white">Register for PushFundz</h2>
+              </div>
+              <p className="text-slate-400 text-sm mb-6">Create your account to start accessing crypto loans with competitive rates based on your credit score.</p>
+              <form onSubmit={registerUser} className="space-y-4">
+                <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Full Name" 
                   value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} required />
-                <Input className={`border p-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} placeholder="Email Address" type="email"
+                <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Email Address" type="email"
                   value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} required />
-                <Input className={`border p-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} placeholder="Wallet Address"
+                <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Wallet Address"
                   value={address || regForm.wallet_address} onChange={(e) => setRegForm({...regForm, wallet_address: e.target.value})} 
                   disabled={isConnected} required />
-                <Button type="submit" className={`bg-blue-500 text-white px-4 py-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} disabled={loading}>
+                <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
                   {loading ? 'Registering...' : 'Register'}
                 </Button>
               </form>

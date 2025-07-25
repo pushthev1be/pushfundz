@@ -13,6 +13,7 @@ import { Wallet, DollarSign, Users, CreditCard, Clock } from 'lucide-react'
 import { WalletConnect } from './components/WalletConnect'
 import { PointsDisplay } from './components/PointsDisplay'
 import { AdminDashboard } from './components/AdminDashboard'
+import { useIsMobile } from './hooks/use-mobile'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -55,6 +56,7 @@ interface PlatformStats {
 
 function AppContent() {
   const { address, isConnected } = useAccount()
+  const isMobile = useIsMobile()
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null)
   const [userLoans, setUserLoans] = useState<Loan[]>([])
@@ -413,10 +415,10 @@ function AppContent() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`max-w-7xl mx-auto py-8 ${isMobile ? 'px-4' : 'px-4 sm:px-6 lg:px-8'}`}>
         {/* Platform Stats */}
         {platformStats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className={`${isMobile ? 'grid grid-cols-2 gap-4 mb-8' : 'grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'}`}>
             <Card>
               <CardContent className="flex items-center p-6">
                 <Users className="h-8 w-8 text-blue-600 mr-3" />
@@ -501,8 +503,9 @@ function AppContent() {
                   placeholder="Amount to fund"
                   value={fundAmount}
                   onChange={(e) => setFundAmount(e.target.value)}
+                  className={isMobile ? 'py-3 text-lg' : ''}
                 />
-                <Button onClick={fundWallet} className="w-full">
+                <Button onClick={fundWallet} className={`w-full ${isMobile ? 'py-4 text-lg' : ''}`}>
                   Fund Wallet
                 </Button>
               </div>
@@ -517,11 +520,11 @@ function AppContent() {
             <CardDescription>Play games to earn reputation points</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
               <div className="text-center p-4 border rounded-lg">
                 <h3 className="font-semibold">Daily RP Drip</h3>
                 <p className="text-sm text-gray-600">Claim 20 RP daily</p>
-                <Button onClick={claimDailyRP} className="mt-2" size="sm">
+                <Button onClick={claimDailyRP} className={`mt-2 ${isMobile ? 'w-full py-3' : ''}`} size={isMobile ? "default" : "sm"}>
                   Claim Daily RP
                 </Button>
               </div>
@@ -529,10 +532,10 @@ function AppContent() {
               <div className="text-center p-4 border rounded-lg">
                 <h3 className="font-semibold">Rock Paper Scissors</h3>
                 <p className="text-sm text-gray-600">Cost: 15 RP | Win: 30 RP</p>
-                <div className="mt-2 space-x-2">
-                  <Button onClick={() => playRPS('rock')} size="sm">🪨</Button>
-                  <Button onClick={() => playRPS('paper')} size="sm">📄</Button>
-                  <Button onClick={() => playRPS('scissors')} size="sm">✂️</Button>
+                <div className={`mt-2 ${isMobile ? 'flex flex-col space-y-2' : 'space-x-2'}`}>
+                  <Button onClick={() => playRPS('rock')} size={isMobile ? "default" : "sm"} className={isMobile ? 'w-full py-3 text-lg' : ''}>🪨 Rock</Button>
+                  <Button onClick={() => playRPS('paper')} size={isMobile ? "default" : "sm"} className={isMobile ? 'w-full py-3 text-lg' : ''}>📄 Paper</Button>
+                  <Button onClick={() => playRPS('scissors')} size={isMobile ? "default" : "sm"} className={isMobile ? 'w-full py-3 text-lg' : ''}>✂️ Scissors</Button>
                 </div>
               </div>
               
@@ -546,10 +549,10 @@ function AppContent() {
                     max="200"
                     value={spinStake}
                     onChange={(e) => setSpinStake(parseInt(e.target.value) || 50)}
-                    className="w-full text-center"
+                    className={`text-center ${isMobile ? 'py-3 text-lg' : 'w-full'}`}
                     placeholder="Stake (20-200)"
                   />
-                  <Button onClick={() => playSpin(spinStake)} size="sm" className="w-full">
+                  <Button onClick={() => playSpin(spinStake)} size={isMobile ? "default" : "sm"} className={`w-full ${isMobile ? 'py-3 text-lg' : ''}`}>
                     🎰 Spin ({spinStake} RP)
                   </Button>
                 </div>
@@ -559,7 +562,7 @@ function AppContent() {
                 <h3 className="font-semibold">Whot (Nigerian Card Game)</h3>
                 <p className="text-sm text-gray-600">Cost: 100 RP | Win: 300 RP</p>
                 <p className="text-xs text-red-600">Very Hard CPU (12% win rate)</p>
-                <Button onClick={playWhot} className="mt-2" size="sm">
+                <Button onClick={playWhot} className={`mt-2 ${isMobile ? 'w-full py-3 text-lg' : ''}`} size={isMobile ? "default" : "sm"}>
                   🃏 Play Whot
                 </Button>
               </div>
@@ -590,6 +593,7 @@ function AppContent() {
                     id="name"
                     value={regForm.name}
                     onChange={(e) => setRegForm({...regForm, name: e.target.value})}
+                    className={isMobile ? 'py-3 text-lg' : ''}
                     required
                   />
                 </div>
@@ -600,6 +604,7 @@ function AppContent() {
                     type="email"
                     value={regForm.email}
                     onChange={(e) => setRegForm({...regForm, email: e.target.value})}
+                    className={isMobile ? 'py-3 text-lg' : ''}
                     required
                   />
                 </div>
@@ -610,6 +615,7 @@ function AppContent() {
                     value={address || regForm.wallet_address}
                     onChange={(e) => setRegForm({...regForm, wallet_address: e.target.value})}
                     placeholder={address ? address : "0x..."}
+                    className={isMobile ? 'py-3 text-lg' : ''}
                     required
                     disabled={isConnected}
                   />
@@ -619,7 +625,7 @@ function AppContent() {
                     </p>
                   )}
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
+                <Button type="submit" className={`w-full ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
                   {loading ? 'Registering...' : 'Register'}
                 </Button>
               </form>
@@ -635,13 +641,21 @@ function AppContent() {
               </div>
             )}
             <Tabs defaultValue="dashboard" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-6">
-                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                <TabsTrigger value="request">Request Loan</TabsTrigger>
-                <TabsTrigger value="payment">Make Payment</TabsTrigger>
-                <TabsTrigger value="loans">My Loans</TabsTrigger>
-                <TabsTrigger value="points">Points & Rewards</TabsTrigger>
-                <TabsTrigger value="admin">Admin Dashboard</TabsTrigger>
+              <TabsList className={`${isMobile ? 'grid w-full grid-cols-2 gap-1 h-auto' : 'grid w-full grid-cols-6'}`}>
+                <TabsTrigger value="dashboard" className={isMobile ? 'text-xs py-2' : ''}>
+                  {isMobile ? 'Home' : 'Dashboard'}
+                </TabsTrigger>
+                <TabsTrigger value="request" className={isMobile ? 'text-xs py-2' : ''}>
+                  {isMobile ? 'Loan' : 'Request Loan'}
+                </TabsTrigger>
+                {!isMobile && <TabsTrigger value="payment">Make Payment</TabsTrigger>}
+                <TabsTrigger value="loans" className={isMobile ? 'text-xs py-2' : ''}>
+                  {isMobile ? 'My Loans' : 'My Loans'}
+                </TabsTrigger>
+                <TabsTrigger value="points" className={isMobile ? 'text-xs py-2' : ''}>
+                  {isMobile ? 'Points' : 'Points & Rewards'}
+                </TabsTrigger>
+                {!isMobile && <TabsTrigger value="admin">Admin Dashboard</TabsTrigger>}
               </TabsList>
 
             <TabsContent value="dashboard">
@@ -699,7 +713,7 @@ function AppContent() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={requestLoan} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={`${isMobile ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}`}>
                       <div>
                         <Label htmlFor="amount">Loan Amount (USD)</Label>
                         <Input
@@ -708,6 +722,7 @@ function AppContent() {
                           value={loanForm.amount_usd}
                           onChange={(e) => setLoanForm({...loanForm, amount_usd: e.target.value})}
                           placeholder="500"
+                          className={isMobile ? 'py-3 text-lg' : ''}
                           required
                         />
                       </div>
@@ -718,18 +733,19 @@ function AppContent() {
                           type="number"
                           value={loanForm.duration_days}
                           onChange={(e) => setLoanForm({...loanForm, duration_days: e.target.value})}
+                          className={isMobile ? 'py-3 text-lg' : ''}
                           required
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className={`${isMobile ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}`}>
                       <div>
                         <Label htmlFor="crypto">Collateral Crypto</Label>
                         <select
                           id="crypto"
                           value={loanForm.collateral_crypto}
                           onChange={(e) => setLoanForm({...loanForm, collateral_crypto: e.target.value})}
-                          className="w-full p-2 border border-gray-300 rounded-md"
+                          className={`w-full p-2 border border-gray-300 rounded-md ${isMobile ? 'py-3 text-lg' : ''}`}
                         >
                           <option value="BTC">Bitcoin (BTC)</option>
                           <option value="ETH">Ethereum (ETH)</option>
@@ -745,6 +761,7 @@ function AppContent() {
                           value={loanForm.collateral_amount}
                           onChange={(e) => setLoanForm({...loanForm, collateral_amount: e.target.value})}
                           placeholder="0.02"
+                          className={isMobile ? 'py-3 text-lg' : ''}
                           required
                         />
                       </div>
@@ -756,10 +773,11 @@ function AppContent() {
                         value={loanForm.purpose}
                         onChange={(e) => setLoanForm({...loanForm, purpose: e.target.value})}
                         placeholder="Business expansion, personal use, etc."
+                        className={isMobile ? 'py-3 text-lg' : ''}
                         required
                       />
                     </div>
-                    <Button type="submit" className="w-full" disabled={loading}>
+                    <Button type="submit" className={`w-full ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
                       {loading ? 'Submitting...' : 'Submit Loan Request'}
                     </Button>
                   </form>

@@ -78,10 +78,26 @@ contract CollateralContract is ReentrancyGuard, Ownable {
         return depositId;
     }
 
-    function releaseCollateral(uint256 depositId) external nonReentrant {
+    mapping(address => bool) public authorizedContracts;
+
+    modifier onlyAuthorized(uint256 depositId) {
+        CollateralDeposit storage deposit = collateralDeposits[depositId];
+        require(
+            deposit.borrower == msg.sender || 
+            msg.sender == owner() || 
+            authorizedContracts[msg.sender], 
+            "Unauthorized"
+        );
+        _;
+    }
+
+    function setAuthorizedContract(address contractAddress, bool authorized) external onlyOwner {
+        authorizedContracts[contractAddress] = authorized;
+    }
+
+    function releaseCollateral(uint256 depositId) external nonReentrant onlyAuthorized(depositId) {
         CollateralDeposit storage deposit = collateralDeposits[depositId];
         require(deposit.isActive, "Deposit not active");
-        require(deposit.borrower == msg.sender || msg.sender == owner(), "Unauthorized");
 
         deposit.isActive = false;
 

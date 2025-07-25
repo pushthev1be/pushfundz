@@ -95,6 +95,28 @@ const TEMPLATES = {
       icon: '/icons/loan-disbursed.png'
     }
   },
+  WALLET_FUNDED: {
+    email: {
+      subject: 'Wallet Funded - PushFundz',
+      html: `
+        <h2>Your wallet has been funded!</h2>
+        <p>Funding Amount: ${{amount}}</p>
+        {{#if autoDeducted}}
+        <p>Auto-deducted for loans: ${{autoDeducted}}</p>
+        {{/if}}
+        <p>New Balance: ${{newBalance}}</p>
+        {{#if outstandingCleared}}
+        <p style="color: green;"><strong>🎉 All outstanding loans have been cleared!</strong></p>
+        {{/if}}
+      `
+    },
+    sms: 'Your PushFundz wallet funded with ${{amount}}. {{#if autoDeducted}}${{autoDeducted}} auto-deducted. {{/if}}New balance: ${{newBalance}}',
+    push: {
+      title: 'Wallet Funded',
+      body: 'Your wallet has been funded. {{#if outstandingCleared}}Outstanding loans cleared!{{/if}}',
+      icon: '/icons/wallet-funded.png'
+    }
+  },
   REPAYMENT_REMINDER: {
     email: {
       subject: 'Loan Repayment Reminder - PushFundz',

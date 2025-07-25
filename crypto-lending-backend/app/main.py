@@ -74,6 +74,18 @@ class PaymentRequest(BaseModel):
     local_currency: str
     amount_local: float
 
+class RPBundlePurchase(BaseModel):
+    bundle_size: str  # "small", "medium", "large"
+    payment_method: str
+    crypto_amount: float
+    crypto_currency: str
+
+RP_BUNDLES = {
+    "small": {"rp": 100, "price_usd": 5},
+    "medium": {"rp": 250, "price_usd": 10},
+    "large": {"rp": 600, "price_usd": 20}
+}
+
 def calculate_loan_terms(credit_score: int, amount_usd: float):
     """Calculate interest rate and collateral requirement based on credit score"""
     base_interest_rate = 12.0  # 12% annual
@@ -276,13 +288,19 @@ async def process_payment(payment: PaymentRequest, db: Session = Depends(get_db)
     db.add(new_transaction)
     
     loan.status = LoanStatus.ACTIVE.value
+    
+    user = db.query(DBUser).filter(DBUser.id == loan.user_id).first()
+    if user:
+        user.fiat_balance -= payment.amount_local  # Make balance negative
+    
     db.commit()
     db.refresh(new_transaction)
     
     return {
         "transaction_id": str(new_transaction.id),
-        "message": "Payment processed successfully",
-        "loan_status": "active"
+        "message": "Payment processed successfully - loan disbursed",
+        "loan_status": "active",
+        "new_wallet_balance": user.fiat_balance if user else None
     }
 
 @app.post("/api/loans/{loan_id}/repay")
@@ -348,4 +366,123 @@ async def get_platform_stats(db: Session = Depends(get_db)):
         "total_loans": total_loans,
         "active_loans": active_loans,
         "total_volume_usd": float(total_volume)
+    }
+
+@app.post("/api/users/{user_id}/fund-wallet")
+async def fund_wallet(user_id: str, funding_data: dict, db: Session = Depends(get_db)):
+    """Fund user wallet with auto-deduction for outstanding loans"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    funding_amount = funding_data.get("amount", 0)
+    currency = funding_data.get("currency", "USD")
+    
+    outstanding_amount = abs(user.fiat_balance) if user.fiat_balance < 0 else 0
+    
+    if outstanding_amount > 0:
+        if funding_amount >= outstanding_amount:
+            remaining_funds = funding_amount - outstanding_amount
+            new_balance = remaining_funds
+            deducted_amount = outstanding_amount
+        else:
+            new_balance = user.fiat_balance + funding_amount  # Still negative
+            deducted_amount = funding_amount
+    else:
+        new_balance = user.fiat_balance + funding_amount
+        deducted_amount = 0
+    
+    user.fiat_balance = new_balance
+    
+    new_transaction = DBTransaction(
+        user_id=uuid.UUID(user_id),
+        transaction_type="wallet_funding",
+        amount=funding_amount,
+        currency=currency,
+        status="completed"
+    )
+    
+    db.add(new_transaction)
+    db.commit()
+    
+    return {
+        "message": "Wallet funded successfully",
+        "funding_amount": funding_amount,
+        "auto_deducted": deducted_amount,
+        "new_balance": new_balance,
+        "outstanding_cleared": deducted_amount == outstanding_amount and outstanding_amount > 0
+    }
+
+@app.post("/api/users/{user_id}/buy-rp")
+async def buy_rp_bundle(user_id: str, purchase_data: RPBundlePurchase, db: Session = Depends(get_db)):
+    """Purchase RP bundle with crypto"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if purchase_data.bundle_size not in RP_BUNDLES:
+        raise HTTPException(status_code=400, detail="Invalid bundle size")
+    
+    bundle = RP_BUNDLES[purchase_data.bundle_size]
+    
+    new_transaction = DBTransaction(
+        user_id=uuid.UUID(user_id),
+        transaction_type="rp_purchase",
+        amount=purchase_data.crypto_amount,
+        currency=purchase_data.crypto_currency,
+        status="completed"
+    )
+    
+    new_points = DBPointsLedger(
+        user_id=uuid.UUID(user_id),
+        event_type="RP_PURCHASE",
+        points_delta=bundle["rp"],
+        description=f"Purchased {purchase_data.bundle_size} RP bundle"
+    )
+    
+    db.add(new_transaction)
+    db.add(new_points)
+    db.commit()
+    
+    return {
+        "message": "RP bundle purchased successfully",
+        "rp_awarded": bundle["rp"],
+        "bundle_size": purchase_data.bundle_size,
+        "transaction_id": str(new_transaction.id)
+    }
+
+@app.get("/api/admin/negative-balances")
+async def get_negative_balance_users(db: Session = Depends(get_db)):
+    """Get users with negative balances for admin monitoring"""
+    negative_users = db.query(DBUser).filter(DBUser.fiat_balance < 0).all()
+    
+    users_data = []
+    total_outstanding = 0
+    
+    for user in negative_users:
+        active_loans = db.query(DBLoan).filter(
+            DBLoan.user_id == user.id,
+            DBLoan.status.in_([LoanStatus.ACTIVE.value, LoanStatus.APPROVED.value])
+        ).count()
+        
+        users_data.append({
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "fiat_balance": user.fiat_balance,
+            "credit_score": user.credit_score,
+            "active_loans": active_loans
+        })
+        
+        total_outstanding += abs(user.fiat_balance)
+    
+    stats = {
+        "totalNegativeUsers": len(negative_users),
+        "totalOutstandingAmount": total_outstanding,
+        "averageNegativeBalance": total_outstanding / len(negative_users) if negative_users else 0
+    }
+    
+    return {
+        "users": users_data,
+        "stats": stats
     }

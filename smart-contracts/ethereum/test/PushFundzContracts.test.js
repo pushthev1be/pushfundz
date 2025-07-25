@@ -22,10 +22,11 @@ describe("PushFundz Lending Contracts", function () {
     
     const LoanContract = await ethers.getContractFactory("LoanContract");
     loanContract = await LoanContract.deploy(
-      await collateralContract.getAddress(),
-      await pointsContract.getAddress()
+      await collateralContract.getAddress()
     );
     await loanContract.waitForDeployment();
+    
+    await collateralContract.connect(owner).setAuthorizedContract(await loanContract.getAddress(), true);
     
     await mockToken.mint(borrower.address, ethers.parseUnits("10000", 6));
   });
@@ -37,13 +38,13 @@ describe("PushFundz Lending Contracts", function () {
       await mockToken.connect(borrower).approve(await collateralContract.getAddress(), collateralAmount);
       await collateralContract.connect(borrower).depositCollateral(
         await mockToken.getAddress(),
-        collateralAmount
+        collateralAmount,
+        0, // loanId (0 for standalone collateral)
+        8000 // liquidationThreshold (80%)
       );
       
-      const balance = await collateralContract.getCollateralBalance(
-        borrower.address,
-        await mockToken.getAddress()
-      );
+      const deposit = await collateralContract.getCollateralDeposit(1);
+      const balance = deposit.amount;
       expect(balance).to.equal(collateralAmount);
     });
 
@@ -51,32 +52,40 @@ describe("PushFundz Lending Contracts", function () {
       const collateralAmount = ethers.parseUnits("1000", 6);
       
       await mockToken.connect(borrower).approve(await collateralContract.getAddress(), collateralAmount);
-      await collateralContract.connect(borrower).depositCollateral(
+      const tx = await collateralContract.connect(borrower).depositCollateral(
         await mockToken.getAddress(),
-        collateralAmount
+        collateralAmount,
+        0, // loanId
+        8000 // liquidationThreshold
       );
+      const receipt = await tx.wait();
+      const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'CollateralDeposited');
+      const depositId = event ? event.args[0] : 1;
       
-      await collateralContract.connect(borrower).withdrawCollateral(
-        await mockToken.getAddress(),
-        collateralAmount
-      );
+      await collateralContract.connect(borrower).releaseCollateral(depositId);
       
-      const balance = await collateralContract.getCollateralBalance(
-        borrower.address,
-        await mockToken.getAddress()
-      );
-      expect(balance).to.equal(0);
+      const deposit = await collateralContract.getCollateralDeposit(depositId);
+      expect(deposit.isActive).to.equal(false);
     });
   });
 
   describe("LoanContract", function () {
+    let collateralDepositId;
+    
     beforeEach(async function () {
       const collateralAmount = ethers.parseUnits("2000", 6);
       await mockToken.connect(borrower).approve(await collateralContract.getAddress(), collateralAmount);
-      await collateralContract.connect(borrower).depositCollateral(
+      
+      const tx = await collateralContract.connect(borrower).depositCollateral(
         await mockToken.getAddress(),
-        collateralAmount
+        collateralAmount,
+        0, // loanId
+        8000 // liquidationThreshold
       );
+      const receipt = await tx.wait();
+      
+      const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'CollateralDeposited');
+      collateralDepositId = event ? event.args[0] : 1; // Default to 1 if event parsing fails
     });
 
     it("Should create a loan request", async function () {
@@ -88,12 +97,12 @@ describe("PushFundz Lending Contracts", function () {
       await loanContract.connect(borrower).requestLoan(
         loanAmount,
         await mockToken.getAddress(),
-        collateralAmount,
         interestRate,
-        duration
+        duration,
+        collateralDepositId
       );
       
-      const loan = await loanContract.loans(0);
+      const loan = await loanContract.loans(1); // Loans start at ID 1
       expect(loan.borrower).to.equal(borrower.address);
       expect(loan.amount).to.equal(loanAmount);
       expect(loan.status).to.equal(0); // PENDING
@@ -108,16 +117,16 @@ describe("PushFundz Lending Contracts", function () {
       await loanContract.connect(borrower).requestLoan(
         loanAmount,
         await mockToken.getAddress(),
-        collateralAmount,
         interestRate,
-        duration
+        duration,
+        collateralDepositId
       );
       
       await mockToken.mint(await loanContract.getAddress(), loanAmount);
       
-      await loanContract.connect(owner).approveLoan(0);
+      await loanContract.connect(owner).approveLoan(1); // Use loan ID 1
       
-      const loan = await loanContract.loans(0);
+      const loan = await loanContract.loans(1);
       expect(loan.status).to.equal(1); // ACTIVE
     });
   });
@@ -126,7 +135,7 @@ describe("PushFundz Lending Contracts", function () {
     it("Should mint points for early repayment", async function () {
       const pointsAmount = 100;
       
-      await pointsContract.connect(owner).mintPoints(borrower.address, pointsAmount);
+      await pointsContract.connect(owner).awardPoints(borrower.address, pointsAmount, "Test reward");
       
       const balance = await pointsContract.balanceOf(borrower.address);
       expect(balance).to.equal(pointsAmount);
@@ -136,9 +145,9 @@ describe("PushFundz Lending Contracts", function () {
       const pointsAmount = 100;
       const burnAmount = 50;
       
-      await pointsContract.connect(owner).mintPoints(borrower.address, pointsAmount);
+      await pointsContract.connect(owner).awardPoints(borrower.address, pointsAmount, "Test reward");
       
-      await pointsContract.connect(owner).burnPoints(borrower.address, burnAmount);
+      await pointsContract.connect(owner).redeemPoints(borrower.address, burnAmount, "Test redemption");
       
       const balance = await pointsContract.balanceOf(borrower.address);
       expect(balance).to.equal(pointsAmount - burnAmount);
@@ -152,27 +161,39 @@ describe("PushFundz Lending Contracts", function () {
       const interestRate = 1200;
       const duration = 30 * 24 * 60 * 60;
       
+      await mockToken.connect(borrower).approve(await collateralContract.getAddress(), collateralAmount);
+      const tx = await collateralContract.connect(borrower).depositCollateral(
+        await mockToken.getAddress(),
+        collateralAmount,
+        0, // loanId
+        8000 // liquidationThreshold
+      );
+      const receipt = await tx.wait();
+      const event = receipt.logs.find(log => log.fragment && log.fragment.name === 'CollateralDeposited');
+      const collateralDepositId = event ? event.args[0] : 1;
+      
       await loanContract.connect(borrower).requestLoan(
         loanAmount,
         await mockToken.getAddress(),
-        collateralAmount,
         interestRate,
-        duration
+        duration,
+        collateralDepositId
       );
       
       await mockToken.mint(await loanContract.getAddress(), loanAmount);
-      await loanContract.connect(owner).approveLoan(0);
+      await loanContract.connect(owner).approveLoan(1); // Use loan ID 1
+      await loanContract.connect(owner).disburseLoan(1); // Disburse the loan to make it active
       
-      const repaymentAmount = loanAmount + (loanAmount * interestRate / 10000);
+      const repaymentAmount = loanAmount + (loanAmount * BigInt(interestRate) / BigInt(10000));
       await mockToken.mint(borrower.address, repaymentAmount);
       await mockToken.connect(borrower).approve(await loanContract.getAddress(), repaymentAmount);
       
-      await loanContract.connect(borrower).repayLoan(0);
+      await loanContract.connect(borrower).repayLoan(1); // Use loan ID 1
       
-      const loan = await loanContract.loans(0);
-      expect(loan.status).to.equal(2); // REPAID
+      const loan = await loanContract.loans(1);
+      expect(loan.status).to.equal(3); // REPAID
       
-      await pointsContract.connect(owner).mintPoints(borrower.address, 50); // Early repayment bonus
+      await pointsContract.connect(owner).awardPoints(borrower.address, 50, "Early repayment bonus");
       const pointsBalance = await pointsContract.balanceOf(borrower.address);
       expect(pointsBalance).to.equal(50);
     });

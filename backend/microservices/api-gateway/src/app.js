@@ -65,6 +65,14 @@ app.use('/api/notifications', createProxyMiddleware({
   }
 }));
 
+app.use('/api/games', createProxyMiddleware({
+  target: process.env.GAMES_SERVICE_URL || 'http://localhost:3006',
+  changeOrigin: true,
+  pathRewrite: {
+    '^/api/games': ''
+  }
+}));
+
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });

@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Wallet, DollarSign, Users, CreditCard, Clock } from 'lucide-react'
 import { WalletConnect } from './components/WalletConnect'
 import { PointsDisplay } from './components/PointsDisplay'
+import { AdminDashboard } from './components/AdminDashboard'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -26,6 +27,7 @@ interface User {
   credit_score: number
   total_loans: number
   successful_repayments: number
+  fiat_balance: number
 }
 
 interface Loan {
@@ -73,6 +75,8 @@ function AppContent() {
     collateral_amount: '',
     purpose: ''
   })
+  const [fundAmount, setFundAmount] = useState('')
+  const [gameResult, setGameResult] = useState<string | null>(null)
 
   const [paymentForm, setPaymentForm] = useState({
     loan_id: '',
@@ -266,6 +270,124 @@ function AppContent() {
     return 'text-red-600'
   }
 
+  const fundWallet = async () => {
+    if (!currentUser || !fundAmount) return
+    
+    try {
+      const response = await fetch(`${API_URL}/api/users/${currentUser.id}/fund-wallet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(fundAmount),
+          currency: 'USD'
+        })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setSuccess(`Wallet funded! ${result.auto_deducted > 0 ? `$${result.auto_deducted} auto-deducted for loans. ` : ''}New balance: $${result.new_balance}`)
+        setFundAmount('')
+        const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          setCurrentUser(userData.user)
+        }
+      }
+    } catch (error) {
+      setError('Failed to fund wallet')
+    }
+  }
+
+  const claimDailyRP = async () => {
+    if (!currentUser) return
+    
+    try {
+      const response = await fetch(`${API_URL}/api/games/daily-drip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setSuccess(`${result.message} +${result.rpAwarded} RP`)
+      } else {
+        const error = await response.json()
+        setError(error.error)
+      }
+    } catch (error) {
+      setError('Failed to claim daily RP')
+    }
+  }
+
+  const [spinStake, setSpinStake] = useState(50)
+
+  const playRPS = async (choice: string) => {
+    if (!currentUser) return
+    
+    try {
+      const response = await fetch(`${API_URL}/api/games/rps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUser.id, choice })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setGameResult(`You: ${result.player_choice}, CPU: ${result.computer_choice}. ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}`)
+      } else {
+        const error = await response.json()
+        setError(error.error)
+      }
+    } catch (error) {
+      setError('Failed to play RPS')
+    }
+  }
+
+  const playSpin = async (stake = 50) => {
+    if (!currentUser) return
+    
+    try {
+      const response = await fetch(`${API_URL}/api/games/spin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUser.id, rp_stake: stake })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setGameResult(`Spin (${stake} RP): ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}`)
+      } else {
+        const error = await response.json()
+        setError(error.error)
+      }
+    } catch (error) {
+      setError('Failed to play spin')
+    }
+  }
+
+  const playWhot = async () => {
+    if (!currentUser) return
+    
+    try {
+      const response = await fetch(`${API_URL}/api/games/whot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUser.id })
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        setGameResult(`Whot vs CPU: ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}. ${result.message}`)
+      } else {
+        const error = await response.json()
+        setError(error.error)
+      }
+    } catch (error) {
+      setError('Failed to play Whot')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -346,6 +468,105 @@ function AppContent() {
           </Alert>
         )}
 
+        {gameResult && (
+          <Alert className="mb-6 border-blue-200 bg-blue-50">
+            <AlertDescription className="text-blue-800">{gameResult}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Wallet Balance Display */}
+        {currentUser && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                Wallet Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center">
+                <div className={`text-3xl font-bold ${currentUser.fiat_balance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  ${currentUser.fiat_balance.toFixed(2)}
+                </div>
+                {currentUser.fiat_balance < 0 && (
+                  <p className="text-sm text-red-600 mt-2">
+                    Outstanding loan amount. Fund your wallet to clear this balance.
+                  </p>
+                )}
+              </div>
+              
+              <div className="mt-4 space-y-2">
+                <Input
+                  type="number"
+                  placeholder="Amount to fund"
+                  value={fundAmount}
+                  onChange={(e) => setFundAmount(e.target.value)}
+                />
+                <Button onClick={fundWallet} className="w-full">
+                  Fund Wallet
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* RP Games Section */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>RP Games</CardTitle>
+            <CardDescription>Play games to earn reputation points</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 border rounded-lg">
+                <h3 className="font-semibold">Daily RP Drip</h3>
+                <p className="text-sm text-gray-600">Claim 20 RP daily</p>
+                <Button onClick={claimDailyRP} className="mt-2" size="sm">
+                  Claim Daily RP
+                </Button>
+              </div>
+              
+              <div className="text-center p-4 border rounded-lg">
+                <h3 className="font-semibold">Rock Paper Scissors</h3>
+                <p className="text-sm text-gray-600">Cost: 15 RP | Win: 30 RP</p>
+                <div className="mt-2 space-x-2">
+                  <Button onClick={() => playRPS('rock')} size="sm">🪨</Button>
+                  <Button onClick={() => playRPS('paper')} size="sm">📄</Button>
+                  <Button onClick={() => playRPS('scissors')} size="sm">✂️</Button>
+                </div>
+              </div>
+              
+              <div className="text-center p-4 border rounded-lg">
+                <h3 className="font-semibold">Spin Wheel</h3>
+                <p className="text-sm text-gray-600">Variable stake: 20-200 RP</p>
+                <div className="mt-2 space-y-2">
+                  <Input
+                    type="number"
+                    min="20"
+                    max="200"
+                    value={spinStake}
+                    onChange={(e) => setSpinStake(parseInt(e.target.value) || 50)}
+                    className="w-full text-center"
+                    placeholder="Stake (20-200)"
+                  />
+                  <Button onClick={() => playSpin(spinStake)} size="sm" className="w-full">
+                    🎰 Spin ({spinStake} RP)
+                  </Button>
+                </div>
+              </div>
+
+              <div className="text-center p-4 border rounded-lg">
+                <h3 className="font-semibold">Whot (Nigerian Card Game)</h3>
+                <p className="text-sm text-gray-600">Cost: 100 RP | Win: 300 RP</p>
+                <p className="text-xs text-red-600">Very Hard CPU (12% win rate)</p>
+                <Button onClick={playWhot} className="mt-2" size="sm">
+                  🃏 Play Whot
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {!currentUser ? (
           /* Registration Form */
           <div className="space-y-6">
@@ -414,12 +635,13 @@ function AppContent() {
               </div>
             )}
             <Tabs defaultValue="dashboard" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                 <TabsTrigger value="request">Request Loan</TabsTrigger>
                 <TabsTrigger value="payment">Make Payment</TabsTrigger>
                 <TabsTrigger value="loans">My Loans</TabsTrigger>
                 <TabsTrigger value="points">Points & Rewards</TabsTrigger>
+                <TabsTrigger value="admin">Admin Dashboard</TabsTrigger>
               </TabsList>
 
             <TabsContent value="dashboard">
@@ -681,6 +903,10 @@ function AppContent() {
                   </CardContent>
                 </Card>
               )}
+            </TabsContent>
+
+            <TabsContent value="admin">
+              <AdminDashboard />
             </TabsContent>
           </Tabs>
           </div>

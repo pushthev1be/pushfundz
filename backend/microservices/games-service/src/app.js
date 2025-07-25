@@ -1,5 +1,6 @@
 const express = require('express');
-const { Pool } = require('pg');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3006;
@@ -7,9 +8,8 @@ const PORT = process.env.PORT || 3006;
 app.use(express.json());
 app.use(require('cors')());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/pushfundz_db',
-});
+const dbPath = path.join(__dirname, '../../../../crypto-lending-backend/pushfundz.db');
+const db = new sqlite3.Database(dbPath);
 
 const GAME_COSTS = {
   ROCK_PAPER_SCISSORS: 15,
@@ -179,14 +179,20 @@ app.post('/daily-drip', async (req, res) => {
     const { userId } = req.body;
     
     const today = new Date().toISOString().split('T')[0];
-    const lastClaim = await pool.query(
-      `SELECT event_timestamp FROM points_ledger 
-       WHERE user_id = $1 AND event_type = 'DAILY_DRIP' 
-       AND DATE(event_timestamp) = $2`,
-      [userId, today]
-    );
+    const lastClaim = await new Promise((resolve, reject) => {
+      db.get(
+        `SELECT event_timestamp FROM points_ledger 
+         WHERE user_id = ? AND event_type = 'DAILY_DRIP' 
+         AND DATE(event_timestamp) = ?`,
+        [userId, today],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
     
-    if (lastClaim.rows.length > 0) {
+    if (lastClaim) {
       return res.status(400).json({ error: 'Daily RP already claimed today' });
     }
     
@@ -204,21 +210,32 @@ app.post('/daily-drip', async (req, res) => {
   }
 });
 
-async function getUserRP(userId) {
-  const result = await pool.query(
-    `SELECT COALESCE(SUM(points_delta), 0) as total_rp 
-     FROM points_ledger WHERE user_id = $1`,
-    [userId]
-  );
-  return parseInt(result.rows[0].total_rp);
+function getUserRP(userId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT COALESCE(SUM(points_delta), 0) as total_rp 
+       FROM points_ledger WHERE user_id = ?`,
+      [userId],
+      (err, row) => {
+        if (err) reject(err);
+        else resolve(parseInt(row?.total_rp || 0));
+      }
+    );
+  });
 }
 
-async function updateUserRP(userId, rpDelta, eventType) {
-  await pool.query(
-    `INSERT INTO points_ledger (user_id, event_type, points_delta, description, event_timestamp)
-     VALUES ($1, $2, $3, $4, NOW())`,
-    [userId, eventType, rpDelta, `${eventType}: ${rpDelta} RP`]
-  );
+function updateUserRP(userId, rpDelta, eventType) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO points_ledger (user_id, event_type, points_delta, description, event_timestamp)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [userId, eventType, rpDelta, `${eventType}: ${rpDelta} RP`],
+      function(err) {
+        if (err) reject(err);
+        else resolve(this.lastID);
+      }
+    );
+  });
 }
 
 app.get('/health', (req, res) => {

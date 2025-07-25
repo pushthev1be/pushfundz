@@ -1,0 +1,27 @@
+{
+  "name": "pushfundz-security-service",
+  "version": "1.0.0",
+  "description": "Security and Rate Limiting Service for PushFundz",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-slow-down": "^2.0.1",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.5",
+    "sqlite3": "^5.1.6",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "validator": "^13.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": ["security", "rate-limiting", "fraud-detection", "crypto", "lending"],
+  "author": "PushFundz Team",
+  "license": "MIT"
+}

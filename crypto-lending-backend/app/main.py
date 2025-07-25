@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
+import httpx
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -369,8 +370,24 @@ async def get_platform_stats(db: Session = Depends(get_db)):
     }
 
 @app.post("/api/users/{user_id}/fund-wallet")
-async def fund_wallet(user_id: str, funding_data: dict, db: Session = Depends(get_db)):
+async def fund_wallet(user_id: str, funding_data: dict, request: Request, db: Session = Depends(get_db)):
     """Fund user wallet with auto-deduction for outstanding loans"""
+    try:
+        async with httpx.AsyncClient() as client:
+            security_response = await client.post(
+                "http://localhost:3007/security/validate-transaction",
+                json={
+                    "user_id": user_id,
+                    "amount": funding_data.get("amount", 0),
+                    "transaction_type": "wallet_funding"
+                },
+                headers={"X-Forwarded-For": request.client.host}
+            )
+            if security_response.status_code != 200:
+                raise HTTPException(status_code=429, detail="Transaction blocked by security system")
+    except httpx.RequestError:
+        pass  # Continue if security service is unavailable
+    
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -414,8 +431,24 @@ async def fund_wallet(user_id: str, funding_data: dict, db: Session = Depends(ge
     }
 
 @app.post("/api/users/{user_id}/buy-rp")
-async def buy_rp_bundle(user_id: str, purchase_data: RPBundlePurchase, db: Session = Depends(get_db)):
+async def buy_rp_bundle(user_id: str, purchase_data: RPBundlePurchase, request: Request, db: Session = Depends(get_db)):
     """Purchase RP bundle with crypto"""
+    try:
+        async with httpx.AsyncClient() as client:
+            security_response = await client.post(
+                "http://localhost:3007/security/validate-transaction",
+                json={
+                    "user_id": user_id,
+                    "amount": purchase_data.crypto_amount,
+                    "transaction_type": "rp_purchase"
+                },
+                headers={"X-Forwarded-For": request.client.host}
+            )
+            if security_response.status_code != 200:
+                raise HTTPException(status_code=429, detail="Purchase blocked by security system")
+    except httpx.RequestError:
+        pass  # Continue if security service is unavailable
+    
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

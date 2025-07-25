@@ -65,11 +65,34 @@ app.use('/api/notifications', createProxyMiddleware({
   }
 }));
 
+app.use('/api/security', createProxyMiddleware({
+  target: process.env.SECURITY_SERVICE_URL || 'http://localhost:3007',
+  changeOrigin: true,
+  pathRewrite: {
+    '^/api/security': ''
+  }
+}));
+
 app.use('/api/games', createProxyMiddleware({
   target: process.env.GAMES_SERVICE_URL || 'http://localhost:3006',
   changeOrigin: true,
   pathRewrite: {
     '^/api/games': ''
+  },
+  onProxyReq: async (proxyReq, req, res) => {
+    try {
+      const rateLimitResponse = await fetch('http://localhost:3007/middleware/game-rate-limit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: req.ip })
+      });
+      if (!rateLimitResponse.ok) {
+        res.status(429).json({ error: 'Rate limit exceeded for games' });
+        return;
+      }
+    } catch (error) {
+      console.log('Rate limiting service unavailable, proceeding without rate limit');
+    }
   }
 }));
 

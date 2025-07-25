@@ -56,10 +56,11 @@ interface PlatformStats {
 
 function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 flex flex-col items-center group">
-      <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">{icon}</div>
-      <div className="text-2xl font-bold text-white mb-1">{value}</div>
-      <div className="text-sm text-slate-400">{label}</div>
+    <div className="bg-[#2d2e36]/80 backdrop-blur-xl rounded-2xl p-6 border border-[#3a3d4a]/50 hover:border-[#00d4ff]/50 transition-all duration-300 hover:shadow-2xl hover:shadow-[#00d4ff]/10 flex flex-col items-center group hover:scale-105 cursor-pointer">
+      <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300 filter drop-shadow-lg">{icon}</div>
+      <div className="text-3xl font-bold text-white mb-2 font-mono tracking-tight">{value}</div>
+      <div className="text-sm text-[#a0a3bd] font-medium uppercase tracking-wide">{label}</div>
+      <div className="absolute inset-0 bg-gradient-to-r from-[#00d4ff]/5 to-[#0099cc]/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
     </div>
   );
 }
@@ -79,25 +80,26 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
   const isMobile = useIsMobile();
   
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10 flex flex-col justify-between group">
-      <div>
-        <div className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-300">{icon}</div>
-        <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-        <p className="text-sm text-slate-400 mb-4">{description}</p>
+    <div className="bg-[#2d2e36]/90 backdrop-blur-xl rounded-2xl p-6 border border-[#3a3d4a]/50 hover:border-[#00d4ff]/50 transition-all duration-300 hover:shadow-2xl hover:shadow-[#00d4ff]/20 flex flex-col justify-between group hover:scale-[1.02] relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#00d4ff]/5 via-transparent to-[#0099cc]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+      <div className="relative z-10">
+        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300 filter drop-shadow-lg">{icon}</div>
+        <h3 className="text-2xl font-bold text-white mb-3 font-inter">{title}</h3>
+        <p className="text-sm text-[#a0a3bd] mb-6 leading-relaxed">{description}</p>
       </div>
       {buttons ? (
-        <div className={`${isMobile ? 'flex flex-col space-y-2' : 'grid grid-cols-3 gap-2'}`}>
+        <div className={`relative z-10 ${isMobile ? 'flex flex-col space-y-3' : 'grid grid-cols-3 gap-3'}`}>
           {buttons.map((b) => (
-            <button key={b} onClick={() => onAction(b)} className="bg-slate-700/50 hover:bg-gradient-to-r hover:from-cyan-500 hover:to-blue-500 text-white text-sm px-4 py-3 rounded-xl transition-all duration-300 hover:scale-105 border border-slate-600/50 hover:border-transparent">
+            <button key={b} onClick={() => onAction(b)} className="bg-[#3a3d4a]/50 hover:bg-gradient-to-r hover:from-[#00d4ff] hover:to-[#0099cc] text-white text-sm px-4 py-3 rounded-xl transition-all duration-300 hover:scale-105 border border-[#3a3d4a]/50 hover:border-transparent hover:shadow-lg hover:shadow-[#00d4ff]/30 font-medium">
               {b}
             </button>
           ))}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4 relative z-10">
           {inputPlaceholder && (
             <Input 
-              className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} 
+              className={`bg-[#3a3d4a]/50 border-[#3a3d4a]/50 text-white placeholder-[#a0a3bd] rounded-xl p-4 w-full focus:border-[#00d4ff] focus:ring-[#00d4ff]/20 backdrop-blur-sm ${isMobile ? 'py-4 text-lg' : ''}`}
               placeholder={inputPlaceholder}
               value={inputValue}
               onChange={(e) => onInputChange?.(e.target.value)}
@@ -105,7 +107,7 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
             />
           )}
           {actionLabel && (
-            <Button onClick={() => onAction()} className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`}>
+            <Button onClick={() => onAction()} className={`bg-gradient-to-r from-[#00d4ff] to-[#0099cc] hover:from-[#00b8e6] hover:to-[#0088bb] text-white px-6 py-4 rounded-xl w-full font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-[#00d4ff]/30 ${isMobile ? 'py-5 text-xl' : ''}`}>
               {actionLabel}
             </Button>
           )}
@@ -117,9 +119,9 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
 
 function WalletButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="bg-slate-700/50 hover:bg-gradient-to-r hover:from-cyan-500/20 hover:to-blue-500/20 border border-slate-600/50 hover:border-cyan-500/50 px-6 py-4 rounded-xl w-full mb-3 text-white transition-all duration-300 hover:scale-105 flex items-center justify-center group">
+    <button onClick={onClick} className="bg-[#3a3d4a]/50 hover:bg-gradient-to-r hover:from-[#00d4ff] hover:to-[#0099cc] border border-[#3a3d4a]/50 hover:border-transparent px-6 py-4 rounded-xl w-full mb-3 text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-[#00d4ff]/20 flex items-center justify-center group">
       <span className="mr-3 text-xl group-hover:scale-110 transition-transform duration-300">💼</span> 
-      <span className="font-medium">{label}</span>
+      <span className="text-lg">{label}</span>
     </button>
   );
 }
@@ -462,27 +464,33 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-[#1a1b23] relative overflow-hidden">
+      {/* Background gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b23] via-[#2d2e36] to-[#1a1b23] opacity-50"></div>
+      <div className="relative z-10">
       {/* Header */}
-      <header className="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700/50">
+      <header className="bg-[#2d2e36]/80 backdrop-blur-xl border-b border-[#3a3d4a]/50 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-xl flex items-center justify-center">
-                <Wallet className="h-6 w-6 text-white" />
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-[#00d4ff] to-[#0099cc] rounded-2xl flex items-center justify-center shadow-lg shadow-[#00d4ff]/20">
+                <Wallet className="h-7 w-7 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">PushFundz</h1>
-                <span className="text-sm text-slate-400">Crypto Lending Platform</span>
+                <h1 className="text-3xl font-bold text-white font-inter">PushFundz</h1>
+                <span className="text-sm text-[#a0a3bd] font-medium">Premium Crypto Lending</span>
               </div>
             </div>
             {currentUser && (
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-6">
                 <div className="text-right">
-                  <p className="text-sm font-medium text-white">{currentUser.name}</p>
-                  <p className={`text-sm font-semibold ${getCreditScoreColor(currentUser.credit_score)}`}>
-                    Credit Score: {currentUser.credit_score}
-                  </p>
+                  <p className="text-lg font-semibold text-white">{currentUser.name}</p>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${currentUser.credit_score >= 700 ? 'bg-[#00ff88]' : currentUser.credit_score >= 600 ? 'bg-[#ffb000]' : 'bg-[#ff4757]'}`}></div>
+                    <p className={`text-sm font-bold ${getCreditScoreColor(currentUser.credit_score)}`}>
+                      Credit: {currentUser.credit_score}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -960,13 +968,13 @@ function AppContent() {
               {currentUser ? (
                 <PointsDisplay userId={currentUser.id} />
               ) : (
-                <Card>
+                <Card className="bg-[#2d2e36]/80 backdrop-blur-xl border border-[#3a3d4a]/50">
                   <CardHeader>
-                    <CardTitle>Points & Rewards</CardTitle>
-                    <CardDescription>Register and connect your wallet to view your trust points</CardDescription>
+                    <CardTitle className="text-white text-2xl font-bold">Points & Rewards</CardTitle>
+                    <CardDescription className="text-[#a0a3bd]">Register and connect your wallet to view your trust points</CardDescription>
                   </CardHeader>
                   <CardContent className="text-center py-8">
-                    <p className="text-muted-foreground">Please register and connect your wallet to access the points system</p>
+                    <p className="text-[#a0a3bd]">Please register and connect your wallet to access the points system</p>
                   </CardContent>
                 </Card>
               )}
@@ -979,6 +987,7 @@ function AppContent() {
           </div>
         )}
       </main>
+      </div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { WagmiProvider, useAccount } from 'wagmi'
+import { WagmiProvider, useAccount, useConnect } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { config } from './config/web3'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Wallet, DollarSign, Users, CreditCard, Clock } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { WalletConnect } from './components/WalletConnect'
 import { PointsDisplay } from './components/PointsDisplay'
 import { AdminDashboard } from './components/AdminDashboard'
@@ -54,8 +54,76 @@ interface PlatformStats {
   total_volume_usd: number
 }
 
+function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow flex flex-col items-center">
+      <span className="text-3xl mb-2">{icon}</span>
+      <span className="text-lg font-bold">{value}</span>
+      <span className="text-sm text-gray-500">{label}</span>
+    </div>
+  );
+}
+
+function GameCard({ title, description, icon, actionLabel, onAction, buttons, inputPlaceholder, inputValue, onInputChange, inputProps }: {
+  title: string;
+  description: string;
+  icon: string;
+  actionLabel?: string;
+  onAction: (choice?: string) => void;
+  buttons?: string[];
+  inputPlaceholder?: string;
+  inputValue?: number;
+  onInputChange?: (value: string) => void;
+  inputProps?: any;
+}) {
+  const isMobile = useIsMobile();
+  
+  return (
+    <div className="border rounded-xl p-4 flex flex-col justify-between">
+      <div className="text-2xl mb-2">{icon}</div>
+      <h3 className="text-lg font-bold mb-2">{title}</h3>
+      <p className="text-sm text-gray-600 mb-3">{description}</p>
+      {buttons ? (
+        <div className={`${isMobile ? 'flex flex-col space-y-2' : 'space-x-2'}`}>
+          {buttons.map((b) => (
+            <button key={b} onClick={() => onAction(b)} className="bg-gray-100 hover:bg-gray-200 text-sm px-3 py-2 rounded w-full">
+              {b}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          {inputPlaceholder && (
+            <Input 
+              className={`border p-2 rounded w-full mb-2 ${isMobile ? 'py-3 text-lg' : ''}`} 
+              placeholder={inputPlaceholder}
+              value={inputValue}
+              onChange={(e) => onInputChange?.(e.target.value)}
+              {...inputProps}
+            />
+          )}
+          {actionLabel && (
+            <Button onClick={() => onAction()} className={`bg-blue-500 text-white px-3 py-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`}>
+              {actionLabel}
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function WalletButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="border px-4 py-2 rounded w-full mb-2 hover:bg-gray-100 flex items-center justify-center">
+      <span className="mr-2">💼</span> {label}
+    </button>
+  );
+}
+
 function AppContent() {
   const { address, isConnected } = useAccount()
+  const { connect, connectors } = useConnect()
   const isMobile = useIsMobile()
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null)
@@ -416,45 +484,13 @@ function AppContent() {
       </header>
 
       <main className={`max-w-7xl mx-auto py-8 ${isMobile ? 'px-4' : 'px-4 sm:px-6 lg:px-8'}`}>
-        {/* Platform Stats */}
+        {/* Stats Overview */}
         {platformStats && (
-          <div className={`${isMobile ? 'grid grid-cols-2 gap-4 mb-8' : 'grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'}`}>
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <Users className="h-8 w-8 text-blue-600 mr-3" />
-                <div>
-                  <p className="text-2xl font-bold">{platformStats.total_users}</p>
-                  <p className="text-sm text-gray-600">Total Users</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <CreditCard className="h-8 w-8 text-green-600 mr-3" />
-                <div>
-                  <p className="text-2xl font-bold">{platformStats.total_loans}</p>
-                  <p className="text-sm text-gray-600">Total Loans</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <Clock className="h-8 w-8 text-yellow-600 mr-3" />
-                <div>
-                  <p className="text-2xl font-bold">{platformStats.active_loans}</p>
-                  <p className="text-sm text-gray-600">Active Loans</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <DollarSign className="h-8 w-8 text-purple-600 mr-3" />
-                <div>
-                  <p className="text-2xl font-bold">${platformStats.total_volume_usd.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Total Volume</p>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
+            <StatCard label="Total Users" value={platformStats.total_users.toString()} icon="👤" />
+            <StatCard label="Total Loans" value={platformStats.total_loans.toString()} icon="💳" />
+            <StatCard label="Active Loans" value={platformStats.active_loans.toString()} icon="⏳" />
+            <StatCard label="Total Volume" value={`$${platformStats.total_volume_usd.toLocaleString()}`} icon="💰" />
           </div>
         )}
 
@@ -513,124 +549,55 @@ function AppContent() {
           </Card>
         )}
 
-        {/* RP Games Section */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>RP Games</CardTitle>
-            <CardDescription>Play games to earn reputation points</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
-              <div className="text-center p-4 border rounded-lg">
-                <h3 className="font-semibold">Daily RP Drip</h3>
-                <p className="text-sm text-gray-600">Claim 20 RP daily</p>
-                <Button onClick={claimDailyRP} className={`mt-2 ${isMobile ? 'w-full py-3' : ''}`} size={isMobile ? "default" : "sm"}>
-                  Claim Daily RP
-                </Button>
-              </div>
-              
-              <div className="text-center p-4 border rounded-lg">
-                <h3 className="font-semibold">Rock Paper Scissors</h3>
-                <p className="text-sm text-gray-600">Cost: 15 RP | Win: 30 RP</p>
-                <div className={`mt-2 ${isMobile ? 'flex flex-col space-y-2' : 'space-x-2'}`}>
-                  <Button onClick={() => playRPS('rock')} size={isMobile ? "default" : "sm"} className={isMobile ? 'w-full py-3 text-lg' : ''}>🪨 Rock</Button>
-                  <Button onClick={() => playRPS('paper')} size={isMobile ? "default" : "sm"} className={isMobile ? 'w-full py-3 text-lg' : ''}>📄 Paper</Button>
-                  <Button onClick={() => playRPS('scissors')} size={isMobile ? "default" : "sm"} className={isMobile ? 'w-full py-3 text-lg' : ''}>✂️ Scissors</Button>
-                </div>
-              </div>
-              
-              <div className="text-center p-4 border rounded-lg">
-                <h3 className="font-semibold">Spin Wheel</h3>
-                <p className="text-sm text-gray-600">Variable stake: 20-200 RP</p>
-                <div className="mt-2 space-y-2">
-                  <Input
-                    type="number"
-                    min="20"
-                    max="200"
-                    value={spinStake}
-                    onChange={(e) => setSpinStake(parseInt(e.target.value) || 50)}
-                    className={`text-center ${isMobile ? 'py-3 text-lg' : 'w-full'}`}
-                    placeholder="Stake (20-200)"
-                  />
-                  <Button onClick={() => playSpin(spinStake)} size={isMobile ? "default" : "sm"} className={`w-full ${isMobile ? 'py-3 text-lg' : ''}`}>
-                    🎰 Spin ({spinStake} RP)
-                  </Button>
-                </div>
-              </div>
-
-              <div className="text-center p-4 border rounded-lg">
-                <h3 className="font-semibold">Whot (Nigerian Card Game)</h3>
-                <p className="text-sm text-gray-600">Cost: 100 RP | Win: 300 RP</p>
-                <p className="text-xs text-red-600">Very Hard CPU (12% win rate)</p>
-                <Button onClick={playWhot} className={`mt-2 ${isMobile ? 'w-full py-3 text-lg' : ''}`} size={isMobile ? "default" : "sm"}>
-                  🃏 Play Whot
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {!currentUser ? (
           /* Registration Form */
-          <div className="space-y-6">
-            {!isConnected && (
-              <div className="flex justify-center">
-                <WalletConnect />
-              </div>
-            )}
-            <Card className="max-w-md mx-auto">
-              <CardHeader>
-                <CardTitle>Register for PushFundz</CardTitle>
-                <CardDescription>
-                  Create your account to start accessing crypto loans with competitive rates based on your credit score.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={registerUser} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    value={regForm.name}
-                    onChange={(e) => setRegForm({...regForm, name: e.target.value})}
-                    className={isMobile ? 'py-3 text-lg' : ''}
-                    required
-                  />
+          <div className="grid md:grid-cols-2 gap-4">
+            <section className="bg-white rounded-2xl p-4 shadow-md">
+              <h2 className="text-lg font-semibold mb-4">🔗 Connect Wallet</h2>
+              {!isConnected ? (
+                <div className="space-y-2">
+                  <WalletButton label="Injected" onClick={() => {
+                    const connector = connectors.find(c => c.name === 'Injected');
+                    if (connector) connect({ connector });
+                  }} />
+                  <WalletButton label="MetaMask" onClick={() => {
+                    const connector = connectors.find(c => c.name === 'MetaMask');
+                    if (connector) connect({ connector });
+                  }} />
+                  <WalletButton label="Coinbase Wallet" onClick={() => {
+                    const connector = connectors.find(c => c.name === 'Coinbase Wallet');
+                    if (connector) connect({ connector });
+                  }} />
+                  <WalletButton label="WalletConnect" onClick={() => {
+                    const connector = connectors.find(c => c.name === 'WalletConnect');
+                    if (connector) connect({ connector });
+                  }} />
                 </div>
-                <div>
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={regForm.email}
-                    onChange={(e) => setRegForm({...regForm, email: e.target.value})}
-                    className={isMobile ? 'py-3 text-lg' : ''}
-                    required
-                  />
+              ) : (
+                <div className="text-center">
+                  <p className="text-sm text-green-600 mb-2">✓ Wallet Connected</p>
+                  <p className="text-xs text-gray-600">{address}</p>
                 </div>
-                <div>
-                  <Label htmlFor="wallet">Crypto Wallet Address</Label>
-                  <Input
-                    id="wallet"
-                    value={address || regForm.wallet_address}
-                    onChange={(e) => setRegForm({...regForm, wallet_address: e.target.value})}
-                    placeholder={address ? address : "0x..."}
-                    className={isMobile ? 'py-3 text-lg' : ''}
-                    required
-                    disabled={isConnected}
-                  />
-                  {isConnected && (
-                    <p className="text-xs text-green-600 mt-1">
-                      ✓ Wallet connected automatically
-                    </p>
-                  )}
-                </div>
-                <Button type="submit" className={`w-full ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
+              )}
+            </section>
+
+            <section className="bg-white rounded-2xl p-4 shadow-md">
+              <h2 className="text-lg font-semibold mb-4">📝 Register for PushFundz</h2>
+              <p className="text-sm mb-4">Create your account to start accessing crypto loans with competitive rates based on your credit score.</p>
+              <form onSubmit={registerUser} className="space-y-3">
+                <Input className={`border p-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} placeholder="Full Name" 
+                  value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} required />
+                <Input className={`border p-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} placeholder="Email Address" type="email"
+                  value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} required />
+                <Input className={`border p-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} placeholder="Wallet Address"
+                  value={address || regForm.wallet_address} onChange={(e) => setRegForm({...regForm, wallet_address: e.target.value})} 
+                  disabled={isConnected} required />
+                <Button type="submit" className={`bg-blue-500 text-white px-4 py-2 rounded w-full ${isMobile ? 'py-3 text-lg' : ''}`} disabled={loading}>
                   {loading ? 'Registering...' : 'Register'}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
+            </section>
           </div>
         ) : (
           /* Main Dashboard */
@@ -641,7 +608,7 @@ function AppContent() {
               </div>
             )}
             <Tabs defaultValue="dashboard" className="space-y-6">
-              <TabsList className={`${isMobile ? 'grid w-full grid-cols-2 gap-1 h-auto' : 'grid w-full grid-cols-6'}`}>
+              <TabsList className={`${isMobile ? 'grid w-full grid-cols-3 gap-1 h-auto' : 'grid w-full grid-cols-7'}`}>
                 <TabsTrigger value="dashboard" className={isMobile ? 'text-xs py-2' : ''}>
                   {isMobile ? 'Home' : 'Dashboard'}
                 </TabsTrigger>
@@ -651,6 +618,9 @@ function AppContent() {
                 {!isMobile && <TabsTrigger value="payment">Make Payment</TabsTrigger>}
                 <TabsTrigger value="loans" className={isMobile ? 'text-xs py-2' : ''}>
                   {isMobile ? 'My Loans' : 'My Loans'}
+                </TabsTrigger>
+                <TabsTrigger value="earn" className={isMobile ? 'text-xs py-2' : ''}>
+                  {isMobile ? 'Earn' : 'Earn RP'}
                 </TabsTrigger>
                 <TabsTrigger value="points" className={isMobile ? 'text-xs py-2' : ''}>
                   {isMobile ? 'Points' : 'Points & Rewards'}
@@ -904,6 +874,62 @@ function AppContent() {
                     ))}
                   </div>
                 )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="earn">
+              <div className="space-y-6">
+                {/* RP Economy Info */}
+                <div className="p-4 bg-white rounded-2xl shadow-md">
+                  <h2 className="text-xl font-bold mb-2">How RP Works</h2>
+                  <p className="text-sm mb-1">1 RP unlocks $0.05 of borrowing power (within your tier cap).</p>
+                  <p className="text-sm mb-1">Play games or buy RP bundles to grow faster and unlock higher borrowing limits.</p>
+                </div>
+
+                {/* Game Cards */}
+                <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-3'}`}>
+                  <GameCard 
+                    title="Spin Wheel" 
+                    icon="🎰" 
+                    description="Stake 20–200 RP. Higher stakes = higher odds and rewards!"
+                    inputPlaceholder="Enter RP (20-200)"
+                    actionLabel={`Spin (${spinStake} RP)`}
+                    onAction={() => playSpin(spinStake)}
+                    inputValue={spinStake}
+                    onInputChange={(value: string) => setSpinStake(parseInt(value) || 50)}
+                    inputProps={{ min: "20", max: "200", type: "number" }}
+                  />
+                  <GameCard 
+                    title="Rock Paper Scissors" 
+                    icon="✊✋✌️" 
+                    description="Costs 15 RP per play. Win to double your RP!"
+                    buttons={["🪨 Rock", "📄 Paper", "✂️ Scissors"]}
+                    onAction={(choice?: string) => choice && playRPS(choice.split(' ')[1].toLowerCase())}
+                  />
+                  <GameCard 
+                    title="Whot (Nigerian Card Game)" 
+                    icon="🃏" 
+                    description="Costs 100 RP per match. Win 300 RP! Very hard CPU (12% win rate)."
+                    actionLabel="Play Whot"
+                    onAction={playWhot}
+                  />
+                </div>
+
+                {/* Daily RP Claim */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Daily RP Claim</CardTitle>
+                    <CardDescription>Claim your daily reputation points</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 mb-4">Claim 20 RP daily to fuel your games</p>
+                      <Button onClick={claimDailyRP} className={`${isMobile ? 'w-full py-4 text-lg' : ''}`}>
+                        Claim Daily RP
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </TabsContent>
 

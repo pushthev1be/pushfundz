@@ -576,3 +576,236 @@ async def get_negative_balance_users(db: Session = Depends(get_db)):
         "users": users_data,
         "stats": stats
     }
+
+# Game endpoints
+import random
+from datetime import datetime, timedelta
+
+class GameRequest(BaseModel):
+    user_id: str
+
+class RPSRequest(BaseModel):
+    user_id: str
+    choice: str  # "rock", "paper", "scissors"
+
+class SpinRequest(BaseModel):
+    user_id: str
+    rp_stake: int = 50
+
+def get_user_rp_balance(user_id: str, db: Session) -> int:
+    """Get user's current RP balance"""
+    total_points = db.query(func.sum(DBPointsLedger.points_delta)).filter(
+        DBPointsLedger.user_id == uuid.UUID(user_id)
+    ).scalar() or 0
+    return int(total_points)
+
+def add_rp_to_user(user_id: str, amount: int, event_type: str, description: str, db: Session):
+    """Add RP points to user"""
+    new_points = DBPointsLedger(
+        user_id=uuid.UUID(user_id),
+        event_type=event_type,
+        points_delta=amount,
+        description=description
+    )
+    db.add(new_points)
+    db.commit()
+
+def can_claim_daily_rp(user_id: str, db: Session) -> bool:
+    """Check if user can claim daily RP (once per day)"""
+    today = datetime.utcnow().date()
+    last_claim = db.query(DBPointsLedger).filter(
+        DBPointsLedger.user_id == uuid.UUID(user_id),
+        DBPointsLedger.event_type == "DAILY_DRIP",
+        func.date(DBPointsLedger.event_timestamp) == today
+    ).first()
+    return last_claim is None
+
+@app.post("/api/games/daily-drip")
+async def claim_daily_rp(request: GameRequest, db: Session = Depends(get_db)):
+    """Claim daily RP drip"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not can_claim_daily_rp(request.user_id, db):
+        raise HTTPException(status_code=400, detail="Daily RP already claimed today")
+    
+    # Award 25-50 RP randomly
+    rp_awarded = random.randint(25, 50)
+    add_rp_to_user(request.user_id, rp_awarded, "DAILY_DRIP", "Daily RP claim", db)
+    
+    return {
+        "message": "Daily RP claimed successfully!",
+        "rpAwarded": rp_awarded
+    }
+
+@app.post("/api/games/rps")
+async def play_rock_paper_scissors(request: RPSRequest, db: Session = Depends(get_db)):
+    """Play Rock Paper Scissors game"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_rp = get_user_rp_balance(request.user_id, db)
+    if current_rp < 10:  # Minimum 10 RP to play
+        raise HTTPException(status_code=400, detail="Insufficient RP balance (minimum 10 RP required)")
+    
+    choices = ["rock", "paper", "scissors"]
+    if request.choice.lower() not in choices:
+        raise HTTPException(status_code=400, detail="Invalid choice. Must be rock, paper, or scissors")
+    
+    player_choice = request.choice.lower()
+    computer_choice = random.choice(choices)
+    
+    # Determine winner
+    if player_choice == computer_choice:
+        result = "Tie"
+        rp_won = 0
+    elif (player_choice == "rock" and computer_choice == "scissors") or \
+         (player_choice == "paper" and computer_choice == "rock") or \
+         (player_choice == "scissors" and computer_choice == "paper"):
+        result = "You win"
+        rp_won = 20
+    else:
+        result = "You lose"
+        rp_won = -10
+    
+    # Update RP balance
+    if rp_won != 0:
+        add_rp_to_user(request.user_id, rp_won, "RPS_GAME", f"RPS: {result}", db)
+    
+    new_balance = get_user_rp_balance(request.user_id, db)
+    
+    return {
+        "player_choice": player_choice,
+        "computer_choice": computer_choice,
+        "result": result,
+        "rp_won": rp_won,
+        "new_rp_balance": new_balance
+    }
+
+@app.post("/api/games/spin")
+async def play_spin_wheel(request: SpinRequest, db: Session = Depends(get_db)):
+    """Play spin wheel game"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_rp = get_user_rp_balance(request.user_id, db)
+    if current_rp < request.rp_stake:
+        raise HTTPException(status_code=400, detail="Insufficient RP balance")
+    
+    # Deduct stake
+    add_rp_to_user(request.user_id, -request.rp_stake, "SPIN_STAKE", f"Spin wheel stake: {request.rp_stake} RP", db)
+    
+    # Spin results with probabilities
+    spin_results = [
+        {"result": "Nothing", "multiplier": 0, "probability": 40},
+        {"result": "Small Win", "multiplier": 1.5, "probability": 30},
+        {"result": "Big Win", "multiplier": 2.0, "probability": 20},
+        {"result": "Jackpot", "multiplier": 5.0, "probability": 10}
+    ]
+    
+    # Weighted random selection
+    rand = random.randint(1, 100)
+    cumulative = 0
+    selected_result = spin_results[0]
+    
+    for result in spin_results:
+        cumulative += result["probability"]
+        if rand <= cumulative:
+            selected_result = result
+            break
+    
+    rp_won = int(request.rp_stake * selected_result["multiplier"])
+    
+    if rp_won > 0:
+        add_rp_to_user(request.user_id, rp_won, "SPIN_WIN", f"Spin wheel win: {selected_result['result']}", db)
+    
+    new_balance = get_user_rp_balance(request.user_id, db)
+    
+    return {
+        "result": selected_result["result"],
+        "rp_won": rp_won,
+        "new_rp_balance": new_balance
+    }
+
+@app.post("/api/games/whot")
+async def play_whot_game(request: GameRequest, db: Session = Depends(get_db)):
+    """Play Whot card game against CPU"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_rp = get_user_rp_balance(request.user_id, db)
+    if current_rp < 15:  # Minimum 15 RP to play
+        raise HTTPException(status_code=400, detail="Insufficient RP balance (minimum 15 RP required)")
+    
+    # Simple Whot simulation (60% win rate for player)
+    player_wins = random.random() < 0.6
+    
+    if player_wins:
+        result = "You win"
+        rp_won = 30
+        message = "Great game! You defeated the CPU!"
+    else:
+        result = "CPU wins"
+        rp_won = -15
+        message = "Better luck next time!"
+    
+    add_rp_to_user(request.user_id, rp_won, "WHOT_GAME", f"Whot game: {result}", db)
+    new_balance = get_user_rp_balance(request.user_id, db)
+    
+    return {
+        "result": result,
+        "rp_won": rp_won,
+        "new_rp_balance": new_balance,
+        "message": message
+    }
+
+# Points system endpoint
+@app.get("/api/points/user/{user_id}/points")
+async def get_user_points(user_id: str, db: Session = Depends(get_db)):
+    """Get user points data and tier information"""
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Calculate total points
+    total_points = db.query(func.sum(DBPointsLedger.points_delta)).filter(
+        DBPointsLedger.user_id == uuid.UUID(user_id)
+    ).scalar() or 0
+    
+    # Define tier thresholds
+    tier_thresholds = {
+        "BRONZE": 0,
+        "SILVER": 500,
+        "GOLD": 1500,
+        "PLATINUM": 5000
+    }
+    
+    # Determine current tier
+    current_tier = "BRONZE"
+    for tier, threshold in tier_thresholds.items():
+        if total_points >= threshold:
+            current_tier = tier
+    
+    # Get recent history
+    recent_history = db.query(DBPointsLedger).filter(
+        DBPointsLedger.user_id == uuid.UUID(user_id)
+    ).order_by(DBPointsLedger.event_timestamp.desc()).limit(10).all()
+    
+    history_data = [{
+        "id": entry.id,
+        "event_type": entry.event_type,
+        "points_delta": entry.points_delta,
+        "description": entry.description,
+        "event_timestamp": entry.event_timestamp.isoformat()
+    } for entry in recent_history]
+    
+    return {
+        "totalPoints": int(total_points),
+        "tier": current_tier,
+        "tierThresholds": tier_thresholds,
+        "recentHistory": history_data
+    }

@@ -76,10 +76,10 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
   inputPlaceholder?: string;
   inputValue?: number;
   onInputChange?: (value: string) => void;
-  inputProps?: any;
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }) {
   const isMobile = useIsMobile();
-  
+
   return (
     <div className="bg-[#2d2e36]/90 backdrop-blur-xl rounded-2xl p-6 border border-[#3a3d4a]/50 hover:border-[#00d4ff]/50 transition-all duration-300 hover:shadow-2xl hover:shadow-[#00d4ff]/20 flex flex-col justify-between group hover:scale-[1.02] relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-[#00d4ff]/5 via-transparent to-[#0099cc]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -99,7 +99,7 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
       ) : (
         <div className="space-y-4 relative z-10">
           {inputPlaceholder && (
-            <Input 
+            <Input
               className={`bg-[#3a3d4a]/50 border-[#3a3d4a]/50 text-white placeholder-[#a0a3bd] rounded-xl p-4 w-full focus:border-[#00d4ff] focus:ring-[#00d4ff]/20 backdrop-blur-sm ${isMobile ? 'py-4 text-lg' : ''}`}
               placeholder={inputPlaceholder}
               value={inputValue}
@@ -121,7 +121,7 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
 function WalletButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="bg-[#3a3d4a]/50 hover:bg-gradient-to-r hover:from-[#00d4ff] hover:to-[#0099cc] border border-[#3a3d4a]/50 hover:border-transparent px-6 py-4 rounded-xl w-full mb-3 text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-[#00d4ff]/20 flex items-center justify-center group">
-      <span className="mr-3 text-xl group-hover:scale-110 transition-transform duration-300">💼</span> 
+      <span className="mr-3 text-xl group-hover:scale-110 transition-transform duration-300">💼</span>
       <span className="text-lg">{label}</span>
     </button>
   );
@@ -197,21 +197,21 @@ function AppContent() {
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.detail || 'Registration failed')
       }
 
       setSuccess('Registration successful! Your starting credit score is 600.')
-      
+
       const userResponse = await fetch(`${API_URL}/api/users/${data.user_id}`)
       const userData = await userResponse.json()
       setCurrentUser(userData.user)
       setUserLoans(userData.loans)
-      
+
       setRegForm({ name: '', email: '', wallet_address: '' })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
       setLoading(false)
     }
@@ -231,7 +231,7 @@ function AppContent() {
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.detail || 'Login failed')
       }
@@ -239,10 +239,10 @@ function AppContent() {
       setSuccess('Login successful!')
       setCurrentUser(data.user)
       setUserLoans(data.loans)
-      
+
       setLoginForm({ email: '', wallet_address: '' })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -269,17 +269,17 @@ function AppContent() {
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.detail || 'Loan request failed')
       }
 
       setSuccess(`Loan request submitted! Interest rate: ${data.interest_rate}%, Collateral: ${data.collateral_requirement}`)
-      
+
       const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
       const userData = await userResponse.json()
       setUserLoans(userData.loans)
-      
+
       setLoanForm({
         amount_usd: '',
         duration_days: '30',
@@ -287,8 +287,8 @@ function AppContent() {
         collateral_amount: '',
         purpose: ''
       })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Loan request failed')
     } finally {
       setLoading(false)
     }
@@ -311,27 +311,27 @@ function AppContent() {
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.detail || 'Payment processing failed')
       }
 
       setSuccess('Payment processed successfully! Your loan is now active.')
-      
+
       if (currentUser) {
         const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
         const userData = await userResponse.json()
         setUserLoans(userData.loans)
       }
-      
+
       setPaymentForm({
         loan_id: '',
         payment_method: 'bank_transfer',
         local_currency: 'USD',
         amount_local: ''
       })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Payment processing failed')
     } finally {
       setLoading(false)
     }
@@ -348,21 +348,21 @@ function AppContent() {
       })
 
       const data = await response.json()
-      
+
       if (!response.ok) {
         throw new Error(data.detail || 'Loan repayment failed')
       }
 
       setSuccess(`Loan repaid successfully! New credit score: ${data.new_credit_score}`)
-      
+
       if (currentUser) {
         const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
         const userData = await userResponse.json()
         setCurrentUser(userData.user)
         setUserLoans(userData.loans)
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Loan repayment failed')
     } finally {
       setLoading(false)
     }
@@ -387,7 +387,7 @@ function AppContent() {
 
   const fundWallet = async () => {
     if (!currentUser || !fundAmount) return
-    
+
     try {
       const response = await fetch(`${API_URL}/api/users/${currentUser.id}/fund-wallet`, {
         method: 'POST',
@@ -397,7 +397,7 @@ function AppContent() {
           currency: 'USD'
         })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setSuccess(`Wallet funded! ${result.auto_deducted > 0 ? `$${result.auto_deducted} auto-deducted for loans. ` : ''}New balance: $${result.new_balance}`)
@@ -408,21 +408,21 @@ function AppContent() {
           setCurrentUser(userData.user)
         }
       }
-    } catch (error) {
+    } catch {
       setError('Failed to fund wallet')
     }
   }
 
   const claimDailyRP = async () => {
     if (!currentUser) return
-    
+
     try {
       const response = await fetch(`${API_URL}/api/games/daily-drip`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setSuccess(`${result.message} +${result.rpAwarded} RP`)
@@ -430,7 +430,7 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to claim daily RP')
     }
   }
@@ -439,14 +439,14 @@ function AppContent() {
 
   const playRPS = async (choice: string) => {
     if (!currentUser) return
-    
+
     try {
       const response = await fetch(`${API_URL}/api/games/rps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: currentUser.id, choice })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setGameResult(`You: ${result.player_choice}, CPU: ${result.computer_choice}. ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}`)
@@ -454,21 +454,21 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to play RPS')
     }
   }
 
   const playSpin = async (stake = 50) => {
     if (!currentUser) return
-    
+
     try {
       const response = await fetch(`${API_URL}/api/games/spin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: currentUser.id, rp_stake: stake })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setGameResult(`Spin (${stake} RP): ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}`)
@@ -476,21 +476,21 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to play spin')
     }
   }
 
   const playWhot = async () => {
     if (!currentUser) return
-    
+
     try {
       const response = await fetch(`${API_URL}/api/games/whot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: currentUser.id })
       })
-      
+
       if (response.ok) {
         const result = await response.json()
         setGameResult(`Whot vs CPU: ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}. ${result.message}`)
@@ -498,7 +498,7 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to play Whot')
     }
   }
@@ -593,7 +593,7 @@ function AppContent() {
                   </p>
                 )}
               </div>
-              
+
               <div className="mt-4 space-y-2">
                 <Input
                   type="number"
@@ -656,47 +656,47 @@ function AppContent() {
                   <span className="text-2xl mr-3">{isLoginMode ? '🔑' : '📝'}</span>
                   <h2 className="text-xl font-semibold text-white">{isLoginMode ? 'Login to PushFundz' : 'Register for PushFundz'}</h2>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsLoginMode(!isLoginMode)}
                   className="text-cyan-400 hover:text-cyan-300 text-sm underline"
                 >
                   {isLoginMode ? 'Need an account?' : 'Already have an account?'}
                 </button>
               </div>
-              
+
               <p className="text-slate-400 text-sm mb-6">
-                {isLoginMode 
-                  ? 'Welcome back! Login with your email or wallet address.' 
+                {isLoginMode
+                  ? 'Welcome back! Login with your email or wallet address.'
                   : 'Create your account to start accessing crypto loans with competitive rates based on your credit score.'
                 }
               </p>
-              
+
               {isLoginMode ? (
                 <form onSubmit={loginUser} className="space-y-4">
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} 
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`}
                     placeholder="Email Address" type="email"
                     value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} />
-                  
+
                   <div className="text-center text-slate-400 text-sm">OR</div>
-                  
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} 
+
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`}
                     placeholder="Wallet Address"
                     value={loginForm.wallet_address} onChange={(e) => setLoginForm({...loginForm, wallet_address: e.target.value})} />
-                  
+
                   <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
                     {loading ? 'Logging in...' : 'Login'}
                   </Button>
                 </form>
               ) : (
                 <form onSubmit={registerUser} className="space-y-4">
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Full Name" 
+                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Full Name"
                     value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} required />
                   <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Email Address" type="email"
                     value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} required />
                   <div>
-                    <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''} ${walletError ? 'border-red-500' : ''}`} 
+                    <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''} ${walletError ? 'border-red-500' : ''}`}
                       placeholder="Wallet Address (Ethereum, Bitcoin, or Solana)"
-                      value={address || regForm.wallet_address} 
+                      value={address || regForm.wallet_address}
                       onChange={(e) => {
                         const value = e.target.value;
                         setRegForm({...regForm, wallet_address: value});
@@ -705,7 +705,7 @@ function AppContent() {
                         } else {
                           setWalletError('');
                         }
-                      }} 
+                      }}
                       disabled={isConnected} required />
                     {walletError && <p className="text-red-400 text-sm mt-1">{walletError}</p>}
                   </div>
@@ -978,7 +978,7 @@ function AppContent() {
                           <p><strong>Collateral:</strong> {loan.collateral_amount} {loan.collateral_crypto}</p>
                           <p><strong>Due Date:</strong> {new Date(loan.due_date).toLocaleDateString()}</p>
                           {loan.status === 'active' && (
-                            <Button 
+                            <Button
                               onClick={() => repayLoan(loan.id)}
                               className="w-full mt-4"
                               disabled={loading}
@@ -1005,9 +1005,9 @@ function AppContent() {
 
                 {/* Game Cards */}
                 <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-3'}`}>
-                  <GameCard 
-                    title="Spin Wheel" 
-                    icon="🎰" 
+                  <GameCard
+                    title="Spin Wheel"
+                    icon="🎰"
                     description="Stake 20–200 RP. Higher stakes = higher odds and rewards!"
                     inputPlaceholder="Enter RP (20-200)"
                     actionLabel={`Spin (${spinStake} RP)`}
@@ -1016,16 +1016,16 @@ function AppContent() {
                     onInputChange={(value: string) => setSpinStake(parseInt(value) || 50)}
                     inputProps={{ min: "20", max: "200", type: "number" }}
                   />
-                  <GameCard 
-                    title="Rock Paper Scissors" 
-                    icon="✊✋✌️" 
+                  <GameCard
+                    title="Rock Paper Scissors"
+                    icon="✊✋✌️"
                     description="Costs 15 RP per play. Win to double your RP!"
                     buttons={["🪨 Rock", "📄 Paper", "✂️ Scissors"]}
                     onAction={(choice?: string) => choice && playRPS(choice.split(' ')[1].toLowerCase())}
                   />
-                  <GameCard 
-                    title="Whot (Nigerian Card Game)" 
-                    icon="🃏" 
+                  <GameCard
+                    title="Whot (Nigerian Card Game)"
+                    icon="🃏"
                     description="Costs 100 RP per match. Win 300 RP! Very hard CPU (12% win rate)."
                     actionLabel="Play Whot"
                     onAction={playWhot}

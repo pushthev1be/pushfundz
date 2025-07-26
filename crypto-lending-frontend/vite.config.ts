@@ -13,7 +13,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    allowedHosts: ['github-repo-app-tunnel-1ia1mgir.devinapps.com'],
+    allowedHosts: ['github-repo-app-tunnel-1ia1mgir.devinapps.com', 'github-repoapp-tunnel-ehtpvxmu.devinapps.com'],
   },
 })
 

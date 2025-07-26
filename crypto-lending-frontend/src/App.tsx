@@ -76,7 +76,7 @@ function GameCard({ title, description, icon, actionLabel, onAction, buttons, in
   inputPlaceholder?: string;
   inputValue?: number;
   onInputChange?: (value: string) => void;
-  inputProps?: any;
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
 }) {
   const isMobile = useIsMobile();
   
@@ -210,8 +210,8 @@ function AppContent() {
       setUserLoans(userData.loans)
       
       setRegForm({ name: '', email: '', wallet_address: '' })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -241,8 +241,8 @@ function AppContent() {
       setUserLoans(data.loans)
       
       setLoginForm({ email: '', wallet_address: '' })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -287,8 +287,8 @@ function AppContent() {
         collateral_amount: '',
         purpose: ''
       })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -330,8 +330,8 @@ function AppContent() {
         local_currency: 'USD',
         amount_local: ''
       })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -361,8 +361,8 @@ function AppContent() {
         setCurrentUser(userData.user)
         setUserLoans(userData.loans)
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -408,7 +408,7 @@ function AppContent() {
           setCurrentUser(userData.user)
         }
       }
-    } catch (error) {
+    } catch {
       setError('Failed to fund wallet')
     }
   }
@@ -430,7 +430,7 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to claim daily RP')
     }
   }
@@ -454,7 +454,7 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to play RPS')
     }
   }
@@ -476,7 +476,7 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to play spin')
     }
   }
@@ -498,7 +498,7 @@ function AppContent() {
         const error = await response.json()
         setError(error.error)
       }
-    } catch (error) {
+    } catch {
       setError('Failed to play Whot')
     }
   }

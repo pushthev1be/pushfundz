@@ -26,7 +26,7 @@ export function AdminDashboard() {
 
   const fetchNegativeBalanceUsers = async () => {
     try {
-      const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/api/admin/negative-balances`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/admin/negative-balances`);
       if (response.ok) {
         const data = await response.json();
         setNegativeBalanceUsers(data.users);

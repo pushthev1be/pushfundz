@@ -13,6 +13,18 @@ from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, Poi
 
 app = FastAPI(title="PushFundz Crypto Lending Platform", version="1.0.0")
 
+@app.middleware("http")
+async def tunnel_auth_middleware(request: Request, call_next):
+    response = await call_next(request)
+    
+    if request.headers.get("host", "").endswith(".devinapps.com"):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    return response
+
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
     CORSMiddleware,

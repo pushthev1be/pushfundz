@@ -17,7 +17,7 @@ import { useIsMobile } from './hooks/use-mobile'
 import { isValidWalletAddress, getAddressType } from './utils/walletValidation'
 import './App.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://github-repo-manager-tunnel-saqof3vo.devinapps.com')
 
 const queryClient = new QueryClient()
 

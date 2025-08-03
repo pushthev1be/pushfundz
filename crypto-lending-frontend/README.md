@@ -1,4 +1,6 @@
-# React + TypeScript + Vite
+# PushFundz Crypto Lending Frontend
+
+This React + TypeScript + Vite application provides the frontend interface for the PushFundz crypto lending platform.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

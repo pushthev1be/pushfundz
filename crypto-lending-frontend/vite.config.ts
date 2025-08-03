@@ -9,5 +9,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    host: true,
+    allowedHosts: ['pr-verification-app-tunnel-gh8xp4ky.devinapps.com']
+  }
 })
 

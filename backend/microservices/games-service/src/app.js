@@ -25,15 +25,15 @@ const RPS_REWARDS = {
 };
 
 const SPIN_TIERS = {
-  LOW: { min: 20, max: 50, rewards: [0, 25, 35, 50], winChance: 0.6 },
-  MEDIUM: { min: 51, max: 100, rewards: [0, 50, 80, 150], winChance: 0.65 },
-  HIGH: { min: 101, max: 200, rewards: [0, 100, 250, 600], winChance: 0.7 }
+  LOW: { min: 20, max: 50, rewards: [0, 25, 35, 50], winChance: 0.08 },
+  MEDIUM: { min: 51, max: 100, rewards: [0, 50, 80, 150], winChance: 0.05 },
+  HIGH: { min: 101, max: 200, rewards: [0, 100, 250, 600], winChance: 0.02 }
 };
 
 const WHOT_REWARDS = {
   WIN: 300,
   LOSS: 0,
-  WIN_CHANCE: 0.12 // 12% win rate - very difficult
+  WIN_CHANCE: 0.015 // 1.5% win rate - expert AI difficulty
 };
 
 app.post('/game/rps', async (req, res) => {
@@ -48,7 +48,21 @@ app.post('/game/rps', async (req, res) => {
     await updateUserRP(user_id, -GAME_COSTS.ROCK_PAPER_SCISSORS, 'RPS_GAME_COST');
     
     const choices = ['rock', 'paper', 'scissors'];
-    const computerChoice = choices[Math.floor(Math.random() * 3)];
+    
+    const outcome = Math.random();
+    let computerChoice;
+    
+    if (outcome < 0.65) {
+      if (choice === 'rock') computerChoice = 'paper';
+      else if (choice === 'paper') computerChoice = 'scissors';
+      else computerChoice = 'rock';
+    } else if (outcome < 0.9) {
+      computerChoice = choice;
+    } else {
+      if (choice === 'rock') computerChoice = 'scissors';
+      else if (choice === 'paper') computerChoice = 'rock';
+      else computerChoice = 'paper';
+    }
     
     let result, rp_won = 0;
     if (choice === computerChoice) {
@@ -150,6 +164,8 @@ app.post('/game/whot', async (req, res) => {
     
     await updateUserRP(user_id, -GAME_COSTS.WHOT, 'WHOT_GAME_COST');
     
+    const gameSimulation = simulateWhotGame();
+    
     const isWin = Math.random() < WHOT_REWARDS.WIN_CHANCE;
     let rp_won = 0;
     
@@ -165,8 +181,8 @@ app.post('/game/whot', async (req, res) => {
       rp_spent: GAME_COSTS.WHOT,
       rp_won,
       new_rp_balance: newBalance,
-      difficulty: 'hard',
-      message: isWin ? 'Congratulations! You beat the CPU!' : 'CPU won this round. Try again!'
+      difficulty: 'expert',
+      message: isWin ? 'Incredible! You managed to outsmart the expert AI!' : `CPU wins! ${gameSimulation.strategy}`
     });
   } catch (error) {
     console.error('Whot game error:', error);
@@ -248,6 +264,32 @@ app.get('/health', (req, res) => {
     whotRewards: WHOT_REWARDS
   });
 });
+
+function simulateWhotGame() {
+  const strategies = [
+    'AI saved Whot cards for the final move and forced you into an unfavorable shape.',
+    'AI prioritized special cards and blocked your winning opportunities.',
+    'AI analyzed your pattern and countered with perfect card selection.',
+    'AI used advanced probability calculations to predict your moves.',
+    'AI employed defensive strategy, forcing you to draw multiple cards.',
+    'AI executed a perfect endgame sequence with optimal card management.',
+    'AI manipulated the deck order using advanced card counting techniques.',
+    'AI forced you to pick multiple penalty cards at crucial moments.',
+    'AI held back powerful cards until the perfect strategic moment.',
+    'AI predicted your next move and countered with surgical precision.',
+    'AI used psychological warfare to force suboptimal plays.',
+    'AI exploited deck probability to ensure optimal card distribution.',
+    'AI calculated all possible outcomes and chose the winning path.',
+    'AI used advanced game theory to dominate the match.'
+  ];
+  
+  const cpuAdvantage = Math.random() < 0.95; // 95% chance CPU gets better cards
+  
+  return {
+    strategy: strategies[Math.floor(Math.random() * strategies.length)],
+    cpuAdvantage
+  };
+}
 
 app.listen(PORT, () => {
   console.log(`Games Service running on port ${PORT}`);

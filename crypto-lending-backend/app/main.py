@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
 from typing import Optional, List
@@ -9,7 +9,7 @@ import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction
+from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction, Membership, ReferralCode
 
 app = FastAPI(title="PushFundz Crypto Lending Platform", version="1.0.0")
 
@@ -105,6 +105,39 @@ class PaymentRequest(BaseModel):
     payment_method: str
     local_currency: str
     amount_local: float
+
+class MembershipPurchase(BaseModel):
+    tier: str
+
+class MembershipUpgrade(BaseModel):
+    tier: str
+
+class LoanRequestV2(BaseModel):
+    amount: float
+    currency: str
+    duration_days: int
+    collateral_crypto: str
+    collateral_amount: float
+    purpose: str
+
+class ReferralRegistration(BaseModel):
+    name: str
+    email: str
+    referral_code: str = None
+
+class LoanRequestV2(BaseModel):
+    amount: float
+    currency: str  # 'USD' or 'NGN'
+    duration_days: int = 30
+    collateral_crypto: str = "BTC"
+    collateral_amount: float
+    purpose: str = ""
+
+class ReferralRegistration(BaseModel):
+    name: str
+    email: str
+    wallet_address: str = ""
+    referral_code: str = ""
 
 class RPBundlePurchase(BaseModel):
     bundle_size: str  # "small", "medium", "large"
@@ -257,19 +290,53 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/loans/request")
 async def request_loan(loan_request: LoanRequest, user_id: str, db: Session = Depends(get_db)):
-    """Request a new loan"""
+    """Request a new loan - requires active membership"""
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Check membership and validate loan amount
+    membership = db.query(Membership).filter(
+        Membership.user_id == uuid.UUID(user_id),
+        Membership.is_active == True
+    ).first()
+    
+    if not membership:
+        raise HTTPException(
+            status_code=403, 
+            detail="Membership required. Please purchase a membership to access loans."
+        )
+    
+    tier_limits = {
+        'starter': 25,
+        'standard': 100,
+        'premium': 500
+    }
+    
+    max_loan_usd = tier_limits.get(membership.tier, 0)
+    
+    if loan_request.amount_usd > max_loan_usd:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Loan amount exceeds your {membership.tier} tier limit of ${max_loan_usd}"
+        )
+    
+    # Calculate interest rate and collateral
     interest_rate, collateral_percent = calculate_loan_terms(user.credit_score, loan_request.amount_usd)
     
+    # Apply first loan interest-free benefit
+    if not user.first_loan_used:
+        interest_rate = 0.0  # First loan is interest-free!
+        user.first_loan_used = True
+        db.commit()
+    
+    # Check active loans limit
     active_loans = db.query(DBLoan).filter(
         DBLoan.user_id == uuid.UUID(user_id),
         DBLoan.status.in_([LoanStatus.ACTIVE.value, LoanStatus.APPROVED.value])
     ).all()
     
-    if len(active_loans) >= 3:  # Limit to 3 active loans
+    if len(active_loans) >= 3:
         raise HTTPException(status_code=400, detail="Maximum active loans reached")
     
     due_date = datetime.utcnow() + timedelta(days=loan_request.duration_days)
@@ -296,7 +363,10 @@ async def request_loan(loan_request: LoanRequest, user_id: str, db: Session = De
         "message": "Loan request submitted",
         "interest_rate": interest_rate,
         "collateral_requirement": f"{collateral_percent}%",
-        "due_date": due_date.isoformat()
+        "due_date": due_date.isoformat(),
+        "is_interest_free": interest_rate == 0.0,
+        "membership_tier": membership.tier,
+        "max_loan_amount": max_loan_usd
     }
 
 @app.get("/api/loans/{loan_id}")
@@ -479,6 +549,7 @@ async def fund_wallet(user_id: str, funding_data: dict, request: Request, db: Se
         deducted_amount = 0
     
     user.fiat_balance = new_balance
+    db.commit()
     
     new_transaction = DBTransaction(
         user_id=uuid.UUID(user_id),
@@ -498,6 +569,283 @@ async def fund_wallet(user_id: str, funding_data: dict, request: Request, db: Se
         "new_balance": new_balance,
         "outstanding_cleared": deducted_amount == outstanding_amount and outstanding_amount > 0
     }
+    
+@app.post("/api/memberships/purchase")
+async def purchase_membership(
+    membership_request: MembershipPurchase,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    existing_membership = db.query(Membership).filter(Membership.user_id == uuid.UUID(user_id), Membership.is_active == True).first()
+    if existing_membership:
+        raise HTTPException(status_code=400, detail="User already has active membership")
+    
+    tier_prices = {
+        'starter': 5,
+        'standard': 10,
+        'premium': 30
+    }
+    
+    if membership_request.tier not in tier_prices:
+        raise HTTPException(status_code=400, detail="Invalid membership tier")
+    
+    price = tier_prices[membership_request.tier]
+    
+    if user.fiat_balance < price:
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+    
+    user.fiat_balance -= price
+    
+    membership = Membership(
+        user_id=uuid.UUID(user_id),
+        tier=membership_request.tier,
+        price_paid=price
+    )
+    
+    db.add(membership)
+    db.commit()
+    db.refresh(membership)
+    
+    return {
+        "membership_id": membership.id,
+        "tier": membership.tier,
+        "price_paid": price,
+        "new_balance": user.fiat_balance
+    }
+
+@app.post("/api/memberships/upgrade")
+async def upgrade_membership(
+    membership_request: MembershipPurchase,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_membership = db.query(Membership).filter(Membership.user_id == uuid.UUID(user_id), Membership.is_active == True).first()
+    if not current_membership:
+        raise HTTPException(status_code=400, detail="No active membership found")
+    
+    tier_hierarchy = {'starter': 1, 'standard': 2, 'premium': 3}
+    tier_prices = {'starter': 5, 'standard': 10, 'premium': 30}
+    
+    current_tier_level = tier_hierarchy.get(current_membership.tier, 0)
+    new_tier_level = tier_hierarchy.get(membership_request.tier, 0)
+    
+    if new_tier_level <= current_tier_level:
+        raise HTTPException(status_code=400, detail="Can only upgrade to higher tier")
+    
+    upgrade_cost = tier_prices[membership_request.tier] - current_membership.price_paid
+    
+    if user.fiat_balance < upgrade_cost:
+        raise HTTPException(status_code=400, detail="Insufficient balance for upgrade")
+    
+    user.fiat_balance -= upgrade_cost
+    current_membership.tier = membership_request.tier
+    current_membership.price_paid = tier_prices[membership_request.tier]
+    
+    db.commit()
+    
+    return {
+        "membership_id": current_membership.id,
+        "new_tier": membership_request.tier,
+        "upgrade_cost": upgrade_cost,
+        "new_balance": user.fiat_balance
+    }
+
+@app.get("/api/memberships/{user_id}")
+async def get_membership_status(user_id: str, db: Session = Depends(get_db)):
+    membership = db.query(Membership).filter(Membership.user_id == uuid.UUID(user_id), Membership.is_active == True).first()
+    
+    if not membership:
+        return {"has_membership": False}
+    
+    tier_limits = {
+        'starter': {'usd': 25, 'ngn': 40000},
+        'standard': {'usd': 100, 'ngn': 160000},
+        'premium': {'usd': 500, 'ngn': 800000}
+    }
+    
+    return {
+        "has_membership": True,
+        "tier": membership.tier,
+        "price_paid": membership.price_paid,
+        "purchase_date": membership.purchase_date,
+        "limits": tier_limits.get(membership.tier, {})
+    }
+
+@app.post("/api/loans/request-v2")
+async def request_loan_v2(
+    loan_request: LoanRequestV2,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check membership
+    membership = db.query(Membership).filter(Membership.user_id == user_id, Membership.is_active == True).first()
+    if not membership:
+        raise HTTPException(status_code=400, detail="Membership required to request loans")
+    
+    tier_limits = {
+        'starter': {'USD': 25, 'NGN': 40000},
+        'standard': {'USD': 100, 'NGN': 160000},
+        'premium': {'USD': 500, 'NGN': 800000}
+    }
+    
+    if loan_request.currency not in ['USD', 'NGN']:
+        raise HTTPException(status_code=400, detail="Supported currencies: USD, NGN")
+    
+    limit = tier_limits.get(membership.tier, {}).get(loan_request.currency, 0)
+    if loan_request.amount > limit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Loan amount exceeds {membership.tier} tier limit of {limit} {loan_request.currency}"
+        )
+    
+    usd_amount = loan_request.amount
+    if loan_request.currency == 'NGN':
+        usd_amount = loan_request.amount / 1600  # Approximate conversion rate
+    
+    base_rate = 0.15
+    credit_factor = max(0, (user.credit_score - 300) / 500)
+    interest_rate = base_rate - (credit_factor * 0.10)
+    
+    # Apply first loan benefit
+    if not user.first_loan_used:
+        interest_rate = 0.0
+        user.first_loan_used = True
+        db.commit()
+    else:
+        interest_rate = max(0.05, min(0.25, interest_rate))
+    
+    loan = DBLoan(
+        user_id=uuid.UUID(user_id),
+        amount=loan_request.amount,
+        collateral_amount=loan_request.collateral_amount,
+        collateral_asset=loan_request.collateral_crypto,
+        loan_amount=usd_amount,
+        loan_asset=loan_request.currency,
+        interest_rate=interest_rate,
+        duration_days=loan_request.duration_days,
+        status=LoanStatus.PENDING,
+        due_date=datetime.utcnow() + timedelta(days=loan_request.duration_days)
+    )
+    
+    db.add(loan)
+    db.commit()
+    db.refresh(loan)
+    
+    return {
+        "loan_id": str(loan.id),
+        "amount": loan_request.amount,
+        "currency": loan_request.currency,
+        "amount_usd": usd_amount,
+        "interest_rate": round(interest_rate * 100, 2),
+        "first_loan_benefit": interest_rate == 0.0
+    }
+
+@app.post("/api/referrals/generate")
+async def generate_referral_code(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if user already has a referral code
+    existing_code = db.query(ReferralCode).filter(ReferralCode.user_id == uuid.UUID(user_id)).first()
+    if existing_code:
+        return {
+            "referral_code": existing_code.code,
+            "uses_count": existing_code.uses_count
+        }
+    
+    # Generate unique code
+    import random
+    import string
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    while db.query(ReferralCode).filter(ReferralCode.code == code).first():
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    referral_code = ReferralCode(
+        user_id=uuid.UUID(user_id),
+        code=code
+    )
+    
+    db.add(referral_code)
+    db.commit()
+    db.refresh(referral_code)
+    
+    return {
+        "referral_code": code,
+        "uses_count": 0
+    }
+
+@app.post("/api/users/register-with-referral")
+async def register_with_referral(user_data: ReferralRegistration, db: Session = Depends(get_db)):
+    existing_user = db.query(DBUser).filter(
+        (DBUser.email == user_data.email) | 
+        (DBUser.wallet_address == user_data.wallet_address)
+    ).first()
+    
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    
+    referrer_id = None
+    if user_data.referral_code:
+        referral = db.query(ReferralCode).filter(ReferralCode.code == user_data.referral_code).first()
+        if not referral:
+            raise HTTPException(status_code=400, detail="Invalid referral code")
+        referrer_id = referral.user_id
+    
+    new_user = DBUser(
+        name=user_data.name,
+        email=user_data.email,
+        wallet_address=user_data.wallet_address,
+        referred_by=referrer_id
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    if referrer_id:
+        referrer_points = DBPointsLedger(
+            user_id=referrer_id,
+            event_type="referral_bonus",
+            points_delta=50,
+            description="Referral bonus for new user"
+        )
+        db.add(referrer_points)
+        
+        new_user_points = DBPointsLedger(
+            user_id=new_user.id,
+            event_type="referral_welcome",
+            points_delta=25,
+            description="Welcome bonus from referral"
+        )
+        db.add(new_user_points)
+        
+        referral.uses_count += 1
+        
+        db.commit()
+    
+    return {
+        "user_id": str(new_user.id),
+        "message": "Registration successful",
+        "referral_bonus": 25 if referrer_id else 0
+    }
+
 
 @app.post("/api/users/{user_id}/buy-rp")
 async def buy_rp_bundle(user_id: str, purchase_data: RPBundlePurchase, request: Request, db: Session = Depends(get_db)):

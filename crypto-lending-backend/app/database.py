@@ -29,9 +29,14 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    first_loan_used = Column(Boolean, default=False)
+    referred_by = Column(String, nullable=True)
+    
     loans = relationship("Loan", back_populates="user")
     points_ledger = relationship("PointsLedger", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
+    membership = relationship("Membership", back_populates="user", uselist=False)
+    referral_codes = relationship("ReferralCode", back_populates="user")
 
 class Loan(Base):
     __tablename__ = "loans"
@@ -85,6 +90,29 @@ class Transaction(Base):
     completed_at = Column(DateTime, nullable=True)
     
     user = relationship("User", back_populates="transactions")
+
+class Membership(Base):
+    __tablename__ = "memberships"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
+    tier = Column(String)  # 'starter', 'standard', 'premium'
+    price_paid = Column(Float)
+    purchase_date = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    
+    user = relationship("User", back_populates="membership")
+
+class ReferralCode(Base):
+    __tablename__ = "referral_codes"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    code = Column(String, unique=True)
+    uses_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="referral_codes")
 
 def get_db():
     db = SessionLocal()

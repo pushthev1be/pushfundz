@@ -9,7 +9,10 @@ import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction
+from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction, Membership as DBMembership
+from .routers import memberships, loans, admin
+from .schemas import UserCreate, UserLogin, LoanStatus, StatsResponse
+from .config import MEMBERSHIP_TIERS, calculate_loan_terms
 
 app = FastAPI(title="PushFundz Crypto Lending Platform", version="1.0.0")
 
@@ -21,6 +24,11 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# Include routers
+app.include_router(memberships.router)
+app.include_router(loans.router)
+app.include_router(admin.router)
 
 @app.on_event("startup")
 def startup_event():
@@ -65,28 +73,6 @@ class Loan(BaseModel):
     due_date: datetime
     repaid_at: Optional[datetime] = None
 
-class UserRegistration(BaseModel):
-    name: str
-    email: str
-    wallet_address: Optional[str] = None
-    
-    @validator('wallet_address')
-    def validate_wallet_address(cls, v):
-        if v is None:
-            return v
-        
-        if re.match(r'^0x[a-fA-F0-9]{40}$', v):
-            return v
-        if re.match(r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$', v) or re.match(r'^bc1[a-z0-9]{39,59}$', v):
-            return v
-        if re.match(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$', v):
-            return v
-            
-        raise ValueError('Invalid wallet address format')
-
-class UserLogin(BaseModel):
-    email: Optional[str] = None
-    wallet_address: Optional[str] = None
 
 class PaymentRequest(BaseModel):
     loan_id: str
@@ -106,22 +92,6 @@ RP_BUNDLES = {
     "large": {"rp": 600, "price_usd": 20}
 }
 
-def calculate_loan_terms(credit_score: int, amount_usd: float):
-    """Calculate interest rate and collateral requirement based on credit score"""
-    base_interest_rate = 12.0  # 12% annual
-    base_collateral_percent = 200  # 200% collateral
-    
-    if credit_score >= 800:
-        interest_rate = base_interest_rate - 2.0  # 10%
-        collateral_percent = 150  # 150% collateral
-    elif credit_score >= 600:
-        interest_rate = base_interest_rate  # 12%
-        collateral_percent = base_collateral_percent  # 200%
-    else:
-        interest_rate = base_interest_rate + 2.0  # 14%
-        collateral_percent = 250  # 250% collateral
-    
-    return interest_rate, collateral_percent
 
 def update_credit_score(user_id: str, loan_repaid: bool, days_late: int = 0, db: Session = None):
     """Update user credit score based on loan performance"""
@@ -149,7 +119,7 @@ async def healthz():
     return {"status": "ok"}
 
 @app.post("/api/users/register")
-async def register_user(user_data: UserRegistration, db: Session = Depends(get_db)):
+async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user"""
     existing_user = db.query(DBUser).filter(DBUser.email == user_data.email).first()
     if existing_user:

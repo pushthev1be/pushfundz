@@ -32,6 +32,7 @@ class User(Base):
     loans = relationship("Loan", back_populates="user")
     points_ledger = relationship("PointsLedger", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
+    membership = relationship("Membership", back_populates="user", uselist=False)
 
 class Loan(Base):
     __tablename__ = "loans"
@@ -85,6 +86,23 @@ class Transaction(Base):
     completed_at = Column(DateTime, nullable=True)
     
     user = relationship("User", back_populates="transactions")
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    tier = Column(String, nullable=False)  # starter, standard, premium
+    payment_date = Column(DateTime, default=datetime.utcnow)
+    payment_amount_usd = Column(Float, nullable=False)
+    payment_currency = Column(String, default="USD")
+    is_first_loan_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship("User", back_populates="membership")
+
 
 def get_db():
     db = SessionLocal()

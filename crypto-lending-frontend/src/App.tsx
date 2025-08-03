@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { DollarSign, TrendingUp, Shield, Menu, X, ChevronRight, AlertCircle, CheckCircle, CreditCard } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://app-pnjedvrd.fly.dev';
 
 interface User {
   id: string;

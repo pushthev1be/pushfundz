@@ -2,9 +2,42 @@ from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.types import TypeDecorator, CHAR
 import uuid
 from datetime import datetime
 import os
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    Uses PostgreSQL's UUID type, otherwise uses CHAR(36), storing as stringified hex values.
+    """
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(UUID())
+        else:
+            return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return str(value)
+        else:
+            if not isinstance(value, uuid.UUID):
+                return str(value)
+            else:
+                return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        else:
+            if not isinstance(value, uuid.UUID):
+                return uuid.UUID(value)
+            return value
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./pushfundz.db")
 
@@ -19,7 +52,7 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
     wallet_address = Column(String, unique=True, nullable=True)
@@ -37,8 +70,8 @@ class User(Base):
 class Loan(Base):
     __tablename__ = "loans"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
     amount = Column(Float, nullable=False)
     currency = Column(String, default="USD")
     collateral_amount = Column(Float, nullable=True)
@@ -61,7 +94,7 @@ class PointsLedger(Base):
     __tablename__ = "points_ledger"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
     event_type = Column(String, nullable=False)  # loan_repaid, early_repayment, referral, etc.
     points_delta = Column(Integer, nullable=False)  # positive for earning, negative for redemption
     description = Column(Text, nullable=True)
@@ -73,9 +106,9 @@ class PointsLedger(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    loan_id = Column(UUID(as_uuid=True), ForeignKey("loans.id"), nullable=True)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
+    loan_id = Column(GUID(), ForeignKey("loans.id"), nullable=True)
     transaction_type = Column(String, nullable=False)  # fiat_deposit, loan_disbursement, repayment, etc.
     amount = Column(Float, nullable=False)
     currency = Column(String, nullable=False)
@@ -91,8 +124,8 @@ class Transaction(Base):
 class Membership(Base):
     __tablename__ = "memberships"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID(), ForeignKey("users.id"), nullable=False)
     tier = Column(String, nullable=False)  # starter, standard, premium
     payment_date = Column(DateTime, default=datetime.utcnow)
     payment_amount_usd = Column(Float, nullable=False)

@@ -1,1091 +1,887 @@
-import { useState, useEffect } from 'react'
-import { WagmiProvider, useAccount, useConnect } from 'wagmi'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { config } from './config/web3'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Wallet } from 'lucide-react'
-import { WalletConnect } from './components/WalletConnect'
-import { PointsDisplay } from './components/PointsDisplay'
-import { AdminDashboard } from './components/AdminDashboard'
-import { useIsMobile } from './hooks/use-mobile'
-import { isValidWalletAddress, getAddressType } from './utils/walletValidation'
-import './App.css'
+import React, { useState, useEffect, createContext, useContext } from 'react';
+import { DollarSign, TrendingUp, Shield, Menu, X, ChevronRight, AlertCircle, CheckCircle, CreditCard } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-const queryClient = new QueryClient()
+const API_BASE_URL = 'http://localhost:8000';
 
 interface User {
-  id: string
-  name: string
-  email: string
-  wallet_address: string
-  credit_score: number
-  total_loans: number
-  successful_repayments: number
-  fiat_balance: number
+  id: string;
+  name: string;
+  email: string;
+  wallet_address?: string;
+  credit_score: number;
+  fiat_balance: number;
+  tier: number;
+  created_at: string;
+}
+
+interface AuthUser {
+  access_token: string;
+  token_type: string;
+  user: User;
+  loans: Loan[];
 }
 
 interface Loan {
-  id: string
-  user_id: string
-  amount_usd: number
-  duration_days: number
-  interest_rate: number
-  collateral_requirement_percent: number
-  collateral_crypto: string
-  collateral_amount: number
-  purpose: string
-  status: string
-  created_at: string
-  due_date: string
-  repaid_at?: string
+  id: string;
+  amount_usd: number;
+  status: string;
+  created_at: string;
+  due_date: string;
+  interest_rate: number;
+  duration_days: number;
+  collateral_crypto: string;
+  collateral_amount: number;
+  purpose?: string;
 }
 
-interface PlatformStats {
-  total_users: number
-  total_loans: number
-  active_loans: number
-  total_volume_usd: number
+interface Membership {
+  has_membership: boolean;
+  tier: string;
+  tier_name?: string;
+  max_loan_usd?: number;
+  max_loan_ngn?: number;
+  payment_date?: string;
+  first_loan_used?: boolean;
 }
 
-function StatCard({ label, value, icon }: { label: string; value: string; icon: string }) {
-  return (
-    <div className="bg-[#2d2e36]/80 backdrop-blur-xl rounded-2xl p-6 border border-[#3a3d4a]/50 hover:border-[#00d4ff]/50 transition-all duration-300 hover:shadow-2xl hover:shadow-[#00d4ff]/10 flex flex-col items-center group hover:scale-105 cursor-pointer">
-      <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300 filter drop-shadow-lg">{icon}</div>
-      <div className="text-3xl font-bold text-white mb-2 font-mono tracking-tight">{value}</div>
-      <div className="text-sm text-[#a0a3bd] font-medium uppercase tracking-wide">{label}</div>
-      <div className="absolute inset-0 bg-gradient-to-r from-[#00d4ff]/5 to-[#0099cc]/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-    </div>
-  );
+interface AuthContextType {
+  user: AuthUser | null;
+  login: (userData: AuthUser) => void;
+  logout: () => void;
+  loading: boolean;
 }
 
-function GameCard({ title, description, icon, actionLabel, onAction, buttons, inputPlaceholder, inputValue, onInputChange, inputProps }: {
-  title: string;
-  description: string;
-  icon: string;
-  actionLabel?: string;
-  onAction: (choice?: string) => void;
-  buttons?: string[];
-  inputPlaceholder?: string;
-  inputValue?: number;
-  onInputChange?: (value: string) => void;
-  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
-}) {
-  const isMobile = useIsMobile();
+const AuthContext = createContext<AuthContextType | null>(null);
 
-  return (
-    <div className="bg-[#2d2e36]/90 backdrop-blur-xl rounded-2xl p-6 border border-[#3a3d4a]/50 hover:border-[#00d4ff]/50 transition-all duration-300 hover:shadow-2xl hover:shadow-[#00d4ff]/20 flex flex-col justify-between group hover:scale-[1.02] relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#00d4ff]/5 via-transparent to-[#0099cc]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-      <div className="relative z-10">
-        <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300 filter drop-shadow-lg">{icon}</div>
-        <h3 className="text-2xl font-bold text-white mb-3 font-inter">{title}</h3>
-        <p className="text-sm text-[#a0a3bd] mb-6 leading-relaxed">{description}</p>
-      </div>
-      {buttons ? (
-        <div className={`relative z-10 ${isMobile ? 'flex flex-col space-y-3' : 'grid grid-cols-3 gap-3'}`}>
-          {buttons.map((b) => (
-            <button key={b} onClick={() => onAction(b)} className="bg-[#3a3d4a]/50 hover:bg-gradient-to-r hover:from-[#00d4ff] hover:to-[#0099cc] text-white text-sm px-4 py-3 rounded-xl transition-all duration-300 hover:scale-105 border border-[#3a3d4a]/50 hover:border-transparent hover:shadow-lg hover:shadow-[#00d4ff]/30 font-medium">
-              {b}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4 relative z-10">
-          {inputPlaceholder && (
-            <Input
-              className={`bg-[#3a3d4a]/50 border-[#3a3d4a]/50 text-white placeholder-[#a0a3bd] rounded-xl p-4 w-full focus:border-[#00d4ff] focus:ring-[#00d4ff]/20 backdrop-blur-sm ${isMobile ? 'py-4 text-lg' : ''}`}
-              placeholder={inputPlaceholder}
-              value={inputValue}
-              onChange={(e) => onInputChange?.(e.target.value)}
-              {...inputProps}
-            />
-          )}
-          {actionLabel && (
-            <Button onClick={() => onAction()} className={`bg-gradient-to-r from-[#00d4ff] to-[#0099cc] hover:from-[#00b8e6] hover:to-[#0088bb] text-white px-6 py-4 rounded-xl w-full font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-[#00d4ff]/30 ${isMobile ? 'py-5 text-xl' : ''}`}>
-              {actionLabel}
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
+};
 
-function WalletButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="bg-[#3a3d4a]/50 hover:bg-gradient-to-r hover:from-[#00d4ff] hover:to-[#0099cc] border border-[#3a3d4a]/50 hover:border-transparent px-6 py-4 rounded-xl w-full mb-3 text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-[#00d4ff]/20 flex items-center justify-center group">
-      <span className="mr-3 text-xl group-hover:scale-110 transition-transform duration-300">💼</span>
-      <span className="text-lg">{label}</span>
-    </button>
-  );
-}
-
-function AppContent() {
-  const { address, isConnected } = useAccount()
-  const { connect, connectors } = useConnect()
-  const isMobile = useIsMobile()
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null)
-  const [userLoans, setUserLoans] = useState<Loan[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-
-  const [regForm, setRegForm] = useState({
-    name: '',
-    email: '',
-    wallet_address: ''
-  })
-
-  const [loginForm, setLoginForm] = useState({
-    email: '',
-    wallet_address: ''
-  })
-
-  const [isLoginMode, setIsLoginMode] = useState(false)
-  const [walletError, setWalletError] = useState('')
-
-  const [loanForm, setLoanForm] = useState({
-    amount_usd: '',
-    duration_days: '30',
-    collateral_crypto: 'BTC',
-    collateral_amount: '',
-    purpose: ''
-  })
-  const [fundAmount, setFundAmount] = useState('')
-  const [gameResult, setGameResult] = useState<string | null>(null)
-
-  const [paymentForm, setPaymentForm] = useState({
-    loan_id: '',
-    payment_method: 'bank_transfer',
-    local_currency: 'USD',
-    amount_local: ''
-  })
+const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchPlatformStats()
-  }, [])
-
-  const fetchPlatformStats = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/stats`)
-      const data = await response.json()
-      setPlatformStats(data)
-    } catch (err) {
-      console.error('Failed to fetch platform stats:', err)
+    const savedUser = localStorage.getItem('pushfundz_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
     }
-  }
+    setLoading(false);
+  }, []);
 
-  const registerUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
+  const login = (userData: AuthUser) => {
+    setUser(userData);
+    localStorage.setItem('pushfundz_user', JSON.stringify(userData));
+  };
 
-    try {
-      const response = await fetch(`${API_URL}/api/users/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(regForm)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Registration failed')
-      }
-
-      setSuccess('Registration successful! Your starting credit score is 600.')
-
-      const userResponse = await fetch(`${API_URL}/api/users/${data.user_id}`)
-      const userData = await userResponse.json()
-      setCurrentUser(userData.user)
-      setUserLoans(userData.loans)
-
-      setRegForm({ name: '', email: '', wallet_address: '' })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Registration failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loginUser = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(`${API_URL}/api/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loginForm)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Login failed')
-      }
-
-      setSuccess('Login successful!')
-      setCurrentUser(data.user)
-      setUserLoans(data.loans)
-
-      setLoginForm({ email: '', wallet_address: '' })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const requestLoan = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!currentUser) return
-
-    setLoading(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(`${API_URL}/api/loans/request?user_id=${currentUser.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...loanForm,
-          amount_usd: parseFloat(loanForm.amount_usd),
-          duration_days: parseInt(loanForm.duration_days),
-          collateral_amount: parseFloat(loanForm.collateral_amount)
-        })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Loan request failed')
-      }
-
-      setSuccess(`Loan request submitted! Interest rate: ${data.interest_rate}%, Collateral: ${data.collateral_requirement}`)
-
-      const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
-      const userData = await userResponse.json()
-      setUserLoans(userData.loans)
-
-      setLoanForm({
-        amount_usd: '',
-        duration_days: '30',
-        collateral_crypto: 'BTC',
-        collateral_amount: '',
-        purpose: ''
-      })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Loan request failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const processPayment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(`${API_URL}/api/payments/process`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...paymentForm,
-          amount_local: parseFloat(paymentForm.amount_local)
-        })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Payment processing failed')
-      }
-
-      setSuccess('Payment processed successfully! Your loan is now active.')
-
-      if (currentUser) {
-        const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
-        const userData = await userResponse.json()
-        setUserLoans(userData.loans)
-      }
-
-      setPaymentForm({
-        loan_id: '',
-        payment_method: 'bank_transfer',
-        local_currency: 'USD',
-        amount_local: ''
-      })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Payment processing failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const repayLoan = async (loanId: string) => {
-    setLoading(true)
-    setError('')
-    setSuccess('')
-
-    try {
-      const response = await fetch(`${API_URL}/api/loans/${loanId}/repay`, {
-        method: 'POST'
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Loan repayment failed')
-      }
-
-      setSuccess(`Loan repaid successfully! New credit score: ${data.new_credit_score}`)
-
-      if (currentUser) {
-        const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
-        const userData = await userResponse.json()
-        setCurrentUser(userData.user)
-        setUserLoans(userData.loans)
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Loan repayment failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'approved': return 'bg-blue-100 text-blue-800'
-      case 'active': return 'bg-green-100 text-green-800'
-      case 'repaid': return 'bg-gray-100 text-gray-800'
-      case 'defaulted': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getCreditScoreColor = (score: number) => {
-    if (score >= 800) return 'text-green-600'
-    if (score >= 600) return 'text-yellow-600'
-    return 'text-red-600'
-  }
-
-  const fundWallet = async () => {
-    if (!currentUser || !fundAmount) return
-
-    try {
-      const response = await fetch(`${API_URL}/api/users/${currentUser.id}/fund-wallet`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: parseFloat(fundAmount),
-          currency: 'USD'
-        })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setSuccess(`Wallet funded! ${result.auto_deducted > 0 ? `$${result.auto_deducted} auto-deducted for loans. ` : ''}New balance: $${result.new_balance}`)
-        setFundAmount('')
-        const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
-        if (userResponse.ok) {
-          const userData = await userResponse.json()
-          setCurrentUser(userData.user)
-        }
-      }
-    } catch {
-      setError('Failed to fund wallet')
-    }
-  }
-
-  const claimDailyRP = async () => {
-    if (!currentUser) return
-
-    try {
-      const response = await fetch(`${API_URL}/api/games/daily-drip`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUser.id })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setSuccess(`${result.message} +${result.rpAwarded} RP`)
-      } else {
-        const error = await response.json()
-        setError(error.error)
-      }
-    } catch {
-      setError('Failed to claim daily RP')
-    }
-  }
-
-  const [spinStake, setSpinStake] = useState(50)
-
-  const playRPS = async (choice: string) => {
-    if (!currentUser) return
-
-    try {
-      const response = await fetch(`${API_URL}/api/games/rps`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: currentUser.id, choice })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setGameResult(`You: ${result.player_choice}, CPU: ${result.computer_choice}. ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}`)
-      } else {
-        const error = await response.json()
-        setError(error.error)
-      }
-    } catch {
-      setError('Failed to play RPS')
-    }
-  }
-
-  const playSpin = async (stake = 50) => {
-    if (!currentUser) return
-
-    try {
-      const response = await fetch(`${API_URL}/api/games/spin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: currentUser.id, rp_stake: stake })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setGameResult(`Spin (${stake} RP): ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}`)
-      } else {
-        const error = await response.json()
-        setError(error.error)
-      }
-    } catch {
-      setError('Failed to play spin')
-    }
-  }
-
-  const playWhot = async () => {
-    if (!currentUser) return
-
-    try {
-      const response = await fetch(`${API_URL}/api/games/whot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: currentUser.id })
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        setGameResult(`Whot vs CPU: ${result.result}! ${result.rp_won > 0 ? `+${result.rp_won}` : '0'} RP. Balance: ${result.new_rp_balance}. ${result.message}`)
-      } else {
-        const error = await response.json()
-        setError(error.error)
-      }
-    } catch {
-      setError('Failed to play Whot')
-    }
-  }
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('pushfundz_user');
+  };
 
   return (
-    <div className="min-h-screen bg-[#1a1b23] relative overflow-hidden">
-      {/* Background gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1a1b23] via-[#2d2e36] to-[#1a1b23] opacity-50"></div>
-      <div className="relative z-10">
-      {/* Header */}
-      <header className="bg-[#2d2e36]/80 backdrop-blur-xl border-b border-[#3a3d4a]/50 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-r from-[#00d4ff] to-[#0099cc] rounded-2xl flex items-center justify-center shadow-lg shadow-[#00d4ff]/20">
-                <Wallet className="h-7 w-7 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-white font-inter">PushFundz</h1>
-                <span className="text-sm text-[#a0a3bd] font-medium">Premium Crypto Lending</span>
+    <AuthContext.Provider value={{ user, login, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const formatCurrency = (amount: number, currency = 'USD') => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+};
+
+const formatDate = (date: string) => {
+  return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
+const api = {
+  async register(data: { name: string; email: string; wallet_address?: string }) {
+    const response = await fetch(`${API_BASE_URL}/api/users/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Registration failed');
+    return response.json();
+  },
+
+  async login(data: { email?: string; wallet_address?: string }) {
+    const response = await fetch(`${API_BASE_URL}/api/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Login failed');
+    return response.json();
+  },
+
+  async getUser(userId: string) {
+    const response = await fetch(`${API_BASE_URL}/api/users/${userId}`);
+    if (!response.ok) throw new Error('Failed to fetch user');
+    return response.json();
+  },
+
+  async getMembership(userId: string): Promise<Membership> {
+    const response = await fetch(`${API_BASE_URL}/api/memberships/${userId}`);
+    if (!response.ok) throw new Error('Failed to fetch membership');
+    return response.json();
+  },
+
+  async purchaseMembership(userId: string, data: { tier: string; payment_method: string; payment_currency: string; payment_amount: number }) {
+    const response = await fetch(`${API_BASE_URL}/api/memberships/purchase?user_id=${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Membership purchase failed');
+    return response.json();
+  },
+
+  async requestLoan(userId: string, data: { amount_usd: number; duration_days: number; collateral_crypto: string; collateral_amount: string; purpose: string }) {
+    const response = await fetch(`${API_BASE_URL}/api/loans/request?user_id=${userId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) throw new Error('Loan request failed');
+    return response.json();
+  },
+
+  async getUserLoans(userId: string) {
+    const response = await fetch(`${API_BASE_URL}/api/users/${userId}/loans`);
+    if (!response.ok) throw new Error('Failed to fetch loans');
+    return response.json();
+  },
+
+  async getStats() {
+    const response = await fetch(`${API_BASE_URL}/api/stats`);
+    if (!response.ok) throw new Error('Failed to fetch stats');
+    return response.json();
+  }
+};
+
+const Navbar = () => {
+  const { user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  return (
+    <nav className="bg-gray-900 text-white sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-600 bg-clip-text text-transparent">
+                PushFundz
+              </h1>
+            </div>
+            <div className="hidden md:block ml-10">
+              <div className="flex items-baseline space-x-4">
+                <a href="#dashboard" className="hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">
+                  Dashboard
+                </a>
+                <a href="#loans" className="hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">
+                  Loans
+                </a>
+                <a href="#membership" className="hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium">
+                  Membership
+                </a>
               </div>
             </div>
-            {currentUser && (
-              <div className="flex items-center space-x-6">
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-white">{currentUser.name}</p>
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${currentUser.credit_score >= 700 ? 'bg-[#00ff88]' : currentUser.credit_score >= 600 ? 'bg-[#ffb000]' : 'bg-[#ff4757]'}`}></div>
-                    <p className={`text-sm font-bold ${getCreditScoreColor(currentUser.credit_score)}`}>
-                      Credit: {currentUser.credit_score}
-                    </p>
-                  </div>
-                </div>
-              </div>
+          </div>
+          <div className="hidden md:block">
+            <div className="flex items-center space-x-4">
+              {user ? (
+                <>
+                  <span className="text-sm">Credit Score: {user.user.credit_score}</span>
+                  <button
+                    onClick={logout}
+                    className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md text-sm font-medium"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="md:hidden">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-md hover:bg-gray-700"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
+        </div>
+      </div>
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-gray-800">
+          <div className="px-2 pt-2 pb-3 space-y-1">
+            <a href="#dashboard" className="block hover:bg-gray-700 px-3 py-2 rounded-md text-base font-medium">
+              Dashboard
+            </a>
+            <a href="#loans" className="block hover:bg-gray-700 px-3 py-2 rounded-md text-base font-medium">
+              Loans
+            </a>
+            <a href="#membership" className="block hover:bg-gray-700 px-3 py-2 rounded-md text-base font-medium">
+              Membership
+            </a>
+            {user && (
+              <button
+                onClick={logout}
+                className="w-full text-left bg-red-600 hover:bg-red-700 px-3 py-2 rounded-md text-base font-medium"
+              >
+                Logout
+              </button>
             )}
           </div>
         </div>
-      </header>
+      )}
+    </nav>
+  );
+};
 
-      <main className={`max-w-7xl mx-auto py-8 ${isMobile ? 'px-4' : 'px-4 sm:px-6 lg:px-8'}`}>
-        {/* Stats Overview */}
-        {platformStats && (
-          <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <h2 className="text-2xl font-bold text-white mr-3">Platform Overview</h2>
-              <div className="h-px bg-gradient-to-r from-cyan-500 to-transparent flex-1"></div>
+const Dashboard = () => {
+  const { user } = useAuth();
+  const [membership, setMembership] = useState<Membership | null>(null);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [membershipData, loansData] = await Promise.all([
+          api.getMembership(user!.user.id),
+          api.getUserLoans(user!.user.id)
+        ]);
+        setMembership(membershipData);
+        setLoans(loansData.loans || loansData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) fetchData();
+  }, [user]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  const activeLoans = loans.filter(loan => loan.status === 'active' || loan.status === 'approved');
+  const totalBorrowed = loans.reduce((sum, loan) => sum + loan.amount_usd, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Credit Score</p>
+              <p className="text-2xl font-bold">{user!.user.credit_score}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <StatCard label="Total Users" value={platformStats.total_users.toString()} icon="👤" />
-              <StatCard label="Total Loans" value={platformStats.total_loans.toString()} icon="💳" />
-              <StatCard label="Active Loans" value={platformStats.active_loans.toString()} icon="⏳" />
-              <StatCard label="Total Volume" value={`$${platformStats.total_volume_usd.toLocaleString()}`} icon="💰" />
-            </div>
+            <Shield className="h-8 w-8 text-blue-600" />
           </div>
-        )}
+        </div>
 
-        {/* Alerts */}
-        {error && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
-            <AlertDescription className="text-red-800">{error}</AlertDescription>
-          </Alert>
-        )}
-        {success && (
-          <Alert className="mb-6 border-green-200 bg-green-50">
-            <AlertDescription className="text-green-800">{success}</AlertDescription>
-          </Alert>
-        )}
-
-        {gameResult && (
-          <Alert className="mb-6 border-blue-200 bg-blue-50">
-            <AlertDescription className="text-blue-800">{gameResult}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Wallet Balance Display */}
-        {currentUser && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wallet className="h-5 w-5" />
-                Wallet Balance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center">
-                <div className={`text-3xl font-bold ${currentUser.fiat_balance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  ${currentUser.fiat_balance.toFixed(2)}
-                </div>
-                {currentUser.fiat_balance < 0 && (
-                  <p className="text-sm text-red-600 mt-2">
-                    Outstanding loan amount. Fund your wallet to clear this balance.
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <Input
-                  type="number"
-                  placeholder="Amount to fund"
-                  value={fundAmount}
-                  onChange={(e) => setFundAmount(e.target.value)}
-                  className={isMobile ? 'py-3 text-lg' : ''}
-                />
-                <Button onClick={fundWallet} className={`w-full ${isMobile ? 'py-4 text-lg' : ''}`}>
-                  Fund Wallet
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-
-        {!currentUser ? (
-          /* Registration Form */
-          <div className="grid md:grid-cols-2 gap-6">
-            <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="flex items-center mb-6">
-                <span className="text-2xl mr-3">🔗</span>
-                <h2 className="text-xl font-semibold text-white">Connect Wallet</h2>
-              </div>
-              {!isConnected ? (
-                <div>
-                  <p className="text-slate-400 text-sm mb-4">Connect your crypto wallet to access lending features</p>
-                  <div className="space-y-2">
-                    <WalletButton label="Injected" onClick={() => {
-                      const connector = connectors.find(c => c.name === 'Injected');
-                      if (connector) connect({ connector });
-                    }} />
-                    <WalletButton label="MetaMask" onClick={() => {
-                      const connector = connectors.find(c => c.name === 'MetaMask');
-                      if (connector) connect({ connector });
-                    }} />
-                    <WalletButton label="Coinbase Wallet" onClick={() => {
-                      const connector = connectors.find(c => c.name === 'Coinbase Wallet');
-                      if (connector) connect({ connector });
-                    }} />
-                    <WalletButton label="WalletConnect" onClick={() => {
-                      const connector = connectors.find(c => c.name === 'WalletConnect');
-                      if (connector) connect({ connector });
-                    }} />
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center p-6 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-xl border border-green-500/20">
-                  <div className="text-3xl mb-2">✓</div>
-                  <p className="text-green-400 font-medium mb-2">Wallet Connected</p>
-                  <p className="text-xs text-slate-400 font-mono">{address}</p>
-                </div>
-              )}
-            </section>
-
-            <section className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-300">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center">
-                  <span className="text-2xl mr-3">{isLoginMode ? '🔑' : '📝'}</span>
-                  <h2 className="text-xl font-semibold text-white">{isLoginMode ? 'Login to PushFundz' : 'Register for PushFundz'}</h2>
-                </div>
-                <button
-                  onClick={() => setIsLoginMode(!isLoginMode)}
-                  className="text-cyan-400 hover:text-cyan-300 text-sm underline"
-                >
-                  {isLoginMode ? 'Need an account?' : 'Already have an account?'}
-                </button>
-              </div>
-
-              <p className="text-slate-400 text-sm mb-6">
-                {isLoginMode
-                  ? 'Welcome back! Login with your email or wallet address.'
-                  : 'Create your account to start accessing crypto loans with competitive rates based on your credit score.'
-                }
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Membership</p>
+              <p className="text-2xl font-bold capitalize">
+                {membership?.tier || 'None'}
               </p>
+            </div>
+            <CreditCard className="h-8 w-8 text-purple-600" />
+          </div>
+        </div>
 
-              {isLoginMode ? (
-                <form onSubmit={loginUser} className="space-y-4">
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`}
-                    placeholder="Email Address" type="email"
-                    value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} />
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Active Loans</p>
+              <p className="text-2xl font-bold">{activeLoans.length}</p>
+            </div>
+            <DollarSign className="h-8 w-8 text-green-600" />
+          </div>
+        </div>
 
-                  <div className="text-center text-slate-400 text-sm">OR</div>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Total Borrowed</p>
+              <p className="text-2xl font-bold">{formatCurrency(totalBorrowed)}</p>
+            </div>
+            <TrendingUp className="h-8 w-8 text-red-600" />
+          </div>
+        </div>
+      </div>
 
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`}
-                    placeholder="Wallet Address"
-                    value={loginForm.wallet_address} onChange={(e) => setLoginForm({...loginForm, wallet_address: e.target.value})} />
-
-                  <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
-                    {loading ? 'Logging in...' : 'Login'}
-                  </Button>
-                </form>
-              ) : (
-                <form onSubmit={registerUser} className="space-y-4">
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Full Name"
-                    value={regForm.name} onChange={(e) => setRegForm({...regForm, name: e.target.value})} required />
-                  <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''}`} placeholder="Email Address" type="email"
-                    value={regForm.email} onChange={(e) => setRegForm({...regForm, email: e.target.value})} required />
-                  <div>
-                    <Input className={`bg-slate-700/50 border-slate-600/50 text-white placeholder-slate-400 rounded-xl p-3 w-full focus:border-cyan-500 focus:ring-cyan-500/20 ${isMobile ? 'py-4 text-lg' : ''} ${walletError ? 'border-red-500' : ''}`}
-                      placeholder="Wallet Address (Ethereum, Bitcoin, or Solana)"
-                      value={address || regForm.wallet_address}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setRegForm({...regForm, wallet_address: value});
-                        if (value && !isValidWalletAddress(value)) {
-                          setWalletError(`Invalid wallet address format. Detected: ${getAddressType(value)}`);
-                        } else {
-                          setWalletError('');
-                        }
-                      }}
-                      disabled={isConnected} required />
-                    {walletError && <p className="text-red-400 text-sm mt-1">{walletError}</p>}
-                  </div>
-                  <Button type="submit" className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white px-6 py-3 rounded-xl w-full transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25 ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading || !!walletError}>
-                    {loading ? 'Registering...' : 'Register'}
-                  </Button>
-                </form>
-              )}
-            </section>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-bold mb-4">Recent Loans</h2>
+        {loans.length > 0 ? (
+          <div className="space-y-4">
+            {loans.slice(0, 5).map((loan) => (
+              <div key={loan.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium">{formatCurrency(loan.amount_usd)}</p>
+                  <p className="text-sm text-gray-600">Due: {formatDate(loan.due_date)}</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    loan.status === 'active' ? 'bg-green-100 text-green-800' :
+                    loan.status === 'repaid' ? 'bg-blue-100 text-blue-800' :
+                    loan.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {loan.status}
+                  </span>
+                  {loan.interest_rate === 0 && (
+                    <span className="text-green-600 text-sm font-medium">Interest-Free!</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
-          /* Main Dashboard */
-          <div className="space-y-6">
-            {isConnected && (
-              <div className="flex justify-center">
-                <WalletConnect />
-              </div>
-            )}
-            <Tabs defaultValue="dashboard" className="space-y-6">
-              <TabsList className={`${isMobile ? 'grid w-full grid-cols-3 gap-1 h-auto' : 'grid w-full grid-cols-7'}`}>
-                <TabsTrigger value="dashboard" className={isMobile ? 'text-xs py-2' : ''}>
-                  {isMobile ? 'Home' : 'Dashboard'}
-                </TabsTrigger>
-                <TabsTrigger value="request" className={isMobile ? 'text-xs py-2' : ''}>
-                  {isMobile ? 'Loan' : 'Request Loan'}
-                </TabsTrigger>
-                {!isMobile && <TabsTrigger value="payment">Make Payment</TabsTrigger>}
-                <TabsTrigger value="loans" className={isMobile ? 'text-xs py-2' : ''}>
-                  {isMobile ? 'My Loans' : 'My Loans'}
-                </TabsTrigger>
-                <TabsTrigger value="earn" className={isMobile ? 'text-xs py-2' : ''}>
-                  {isMobile ? 'Earn' : 'Earn RP'}
-                </TabsTrigger>
-                <TabsTrigger value="points" className={isMobile ? 'text-xs py-2' : ''}>
-                  {isMobile ? 'Points' : 'Points & Rewards'}
-                </TabsTrigger>
-                {!isMobile && <TabsTrigger value="admin">Admin Dashboard</TabsTrigger>}
-              </TabsList>
-
-            <TabsContent value="dashboard">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Your Profile</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <p><strong>Name:</strong> {currentUser.name}</p>
-                    <p><strong>Email:</strong> {currentUser.email}</p>
-                    <p><strong>Wallet:</strong> {currentUser.wallet_address}</p>
-                    <p><strong>Total Loans:</strong> {currentUser.total_loans}</p>
-                    <p><strong>Successful Repayments:</strong> {currentUser.successful_repayments}</p>
-                    <div className="flex items-center space-x-2">
-                      <strong>Credit Score:</strong>
-                      <Badge className={getCreditScoreColor(currentUser.credit_score)}>
-                        {currentUser.credit_score}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Credit Score Benefits</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="p-3 bg-green-50 rounded-lg">
-                        <p className="font-semibold text-green-800">800+ Score</p>
-                        <p className="text-sm text-green-600">150% collateral, 10% interest rate</p>
-                      </div>
-                      <div className="p-3 bg-yellow-50 rounded-lg">
-                        <p className="font-semibold text-yellow-800">600-799 Score</p>
-                        <p className="text-sm text-yellow-600">200% collateral, 12% interest rate</p>
-                      </div>
-                      <div className="p-3 bg-red-50 rounded-lg">
-                        <p className="font-semibold text-red-800">Below 600 Score</p>
-                        <p className="text-sm text-red-600">250% collateral, 14% interest rate</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="request">
-              <Card className="max-w-2xl mx-auto">
-                <CardHeader>
-                  <CardTitle>Request a Loan</CardTitle>
-                  <CardDescription>
-                    Apply for a crypto-backed loan with terms based on your credit score.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={requestLoan} className="space-y-4">
-                    <div className={`${isMobile ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}`}>
-                      <div>
-                        <Label htmlFor="amount">Loan Amount (USD)</Label>
-                        <Input
-                          id="amount"
-                          type="number"
-                          value={loanForm.amount_usd}
-                          onChange={(e) => setLoanForm({...loanForm, amount_usd: e.target.value})}
-                          placeholder="500"
-                          className={isMobile ? 'py-3 text-lg' : ''}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="duration">Duration (Days)</Label>
-                        <Input
-                          id="duration"
-                          type="number"
-                          value={loanForm.duration_days}
-                          onChange={(e) => setLoanForm({...loanForm, duration_days: e.target.value})}
-                          className={isMobile ? 'py-3 text-lg' : ''}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className={`${isMobile ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'}`}>
-                      <div>
-                        <Label htmlFor="crypto">Collateral Crypto</Label>
-                        <select
-                          id="crypto"
-                          value={loanForm.collateral_crypto}
-                          onChange={(e) => setLoanForm({...loanForm, collateral_crypto: e.target.value})}
-                          className={`w-full p-2 border border-gray-300 rounded-md ${isMobile ? 'py-3 text-lg' : ''}`}
-                        >
-                          <option value="BTC">Bitcoin (BTC)</option>
-                          <option value="ETH">Ethereum (ETH)</option>
-                          <option value="USDC">USD Coin (USDC)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Label htmlFor="collateral_amount">Collateral Amount</Label>
-                        <Input
-                          id="collateral_amount"
-                          type="number"
-                          step="0.00001"
-                          value={loanForm.collateral_amount}
-                          onChange={(e) => setLoanForm({...loanForm, collateral_amount: e.target.value})}
-                          placeholder="0.02"
-                          className={isMobile ? 'py-3 text-lg' : ''}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="purpose">Loan Purpose</Label>
-                      <Input
-                        id="purpose"
-                        value={loanForm.purpose}
-                        onChange={(e) => setLoanForm({...loanForm, purpose: e.target.value})}
-                        placeholder="Business expansion, personal use, etc."
-                        className={isMobile ? 'py-3 text-lg' : ''}
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className={`w-full ${isMobile ? 'py-4 text-lg' : ''}`} disabled={loading}>
-                      {loading ? 'Submitting...' : 'Submit Loan Request'}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="payment">
-              <Card className="max-w-2xl mx-auto">
-                <CardHeader>
-                  <CardTitle>Make Payment</CardTitle>
-                  <CardDescription>
-                    Pay for your approved loan using local currency.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={processPayment} className="space-y-4">
-                    <div>
-                      <Label htmlFor="loan_select">Select Approved Loan</Label>
-                      <select
-                        id="loan_select"
-                        value={paymentForm.loan_id}
-                        onChange={(e) => setPaymentForm({...paymentForm, loan_id: e.target.value})}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        required
-                      >
-                        <option value="">Select a loan...</option>
-                        {userLoans.filter(loan => loan.status === 'approved').map(loan => (
-                          <option key={loan.id} value={loan.id}>
-                            ${loan.amount_usd} - {loan.purpose}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="payment_method">Payment Method</Label>
-                        <select
-                          id="payment_method"
-                          value={paymentForm.payment_method}
-                          onChange={(e) => setPaymentForm({...paymentForm, payment_method: e.target.value})}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                        >
-                          <option value="bank_transfer">Bank Transfer</option>
-                          <option value="credit_card">Credit Card</option>
-                          <option value="mobile_money">Mobile Money</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Label htmlFor="currency">Local Currency</Label>
-                        <select
-                          id="currency"
-                          value={paymentForm.local_currency}
-                          onChange={(e) => setPaymentForm({...paymentForm, local_currency: e.target.value})}
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                        >
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="GBP">GBP</option>
-                          <option value="NGN">NGN</option>
-                          <option value="KES">KES</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="amount_local">Amount in Local Currency</Label>
-                      <Input
-                        id="amount_local"
-                        type="number"
-                        value={paymentForm.amount_local}
-                        onChange={(e) => setPaymentForm({...paymentForm, amount_local: e.target.value})}
-                        placeholder="500"
-                        required
-                      />
-                    </div>
-                    <Button type="submit" className="w-full" disabled={loading}>
-                      {loading ? 'Processing...' : 'Process Payment'}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="loans">
-              <div className="space-y-4">
-                <h2 className="text-2xl font-bold">My Loans</h2>
-                {userLoans.length === 0 ? (
-                  <Card>
-                    <CardContent className="text-center py-8">
-                      <p className="text-gray-500">No loans found. Request your first loan to get started!</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {userLoans.map(loan => (
-                      <Card key={loan.id}>
-                        <CardHeader>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <CardTitle className="text-lg">${loan.amount_usd}</CardTitle>
-                              <CardDescription>{loan.purpose}</CardDescription>
-                            </div>
-                            <Badge className={getStatusColor(loan.status)}>
-                              {loan.status}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <p><strong>Interest Rate:</strong> {loan.interest_rate}%</p>
-                          <p><strong>Duration:</strong> {loan.duration_days} days</p>
-                          <p><strong>Collateral:</strong> {loan.collateral_amount} {loan.collateral_crypto}</p>
-                          <p><strong>Due Date:</strong> {new Date(loan.due_date).toLocaleDateString()}</p>
-                          {loan.status === 'active' && (
-                            <Button
-                              onClick={() => repayLoan(loan.id)}
-                              className="w-full mt-4"
-                              disabled={loading}
-                            >
-                              Repay Loan
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="earn">
-              <div className="space-y-6">
-                {/* RP Economy Info */}
-                <div className="p-4 bg-white rounded-2xl shadow-md">
-                  <h2 className="text-xl font-bold mb-2">How RP Works</h2>
-                  <p className="text-sm mb-1">1 RP unlocks $0.05 of borrowing power (within your tier cap).</p>
-                  <p className="text-sm mb-1">Play games or buy RP bundles to grow faster and unlock higher borrowing limits.</p>
-                </div>
-
-                {/* Game Cards */}
-                <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-3'}`}>
-                  <GameCard
-                    title="Spin Wheel"
-                    icon="🎰"
-                    description="Stake 20–200 RP. Higher stakes = higher odds and rewards!"
-                    inputPlaceholder="Enter RP (20-200)"
-                    actionLabel={`Spin (${spinStake} RP)`}
-                    onAction={() => playSpin(spinStake)}
-                    inputValue={spinStake}
-                    onInputChange={(value: string) => setSpinStake(parseInt(value) || 50)}
-                    inputProps={{ min: "20", max: "200", type: "number" }}
-                  />
-                  <GameCard
-                    title="Rock Paper Scissors"
-                    icon="✊✋✌️"
-                    description="Costs 15 RP per play. Win to double your RP!"
-                    buttons={["🪨 Rock", "📄 Paper", "✂️ Scissors"]}
-                    onAction={(choice?: string) => choice && playRPS(choice.split(' ')[1].toLowerCase())}
-                  />
-                  <GameCard
-                    title="Whot (Nigerian Card Game)"
-                    icon="🃏"
-                    description="Costs 100 RP per match. Win 300 RP! Very hard CPU (12% win rate)."
-                    actionLabel="Play Whot"
-                    onAction={playWhot}
-                  />
-                </div>
-
-                {/* Daily RP Claim */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Daily RP Claim</CardTitle>
-                    <CardDescription>Claim your daily reputation points</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 mb-4">Claim 20 RP daily to fuel your games</p>
-                      <Button onClick={claimDailyRP} className={`${isMobile ? 'w-full py-4 text-lg' : ''}`}>
-                        Claim Daily RP
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="points">
-              {currentUser ? (
-                <PointsDisplay userId={currentUser.id} />
-              ) : (
-                <Card className="bg-[#2d2e36]/80 backdrop-blur-xl border border-[#3a3d4a]/50">
-                  <CardHeader>
-                    <CardTitle className="text-white text-2xl font-bold">Points & Rewards</CardTitle>
-                    <CardDescription className="text-[#a0a3bd]">Register and connect your wallet to view your trust points</CardDescription>
-                  </CardHeader>
-                  <CardContent className="text-center py-8">
-                    <p className="text-[#a0a3bd]">Please register and connect your wallet to access the points system</p>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-
-            <TabsContent value="admin">
-              <AdminDashboard />
-            </TabsContent>
-          </Tabs>
-          </div>
+          <p className="text-gray-600">No loans yet. Start by purchasing a membership!</p>
         )}
-      </main>
       </div>
     </div>
-  )
-}
+  );
+};
 
-function App() {
+const MembershipSection = () => {
+  const { user } = useAuth();
+  const [membership, setMembership] = useState<Membership | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchMembership = async () => {
+      try {
+        const data = await api.getMembership(user!.user.id);
+        setMembership(data);
+      } catch (error) {
+        console.error('Error fetching membership:', error);
+      }
+    };
+
+    if (user) fetchMembership();
+  }, [user]);
+
+  const tiers = [
+    {
+      name: 'Starter',
+      price_usd: 5,
+      price_ngn: 7500,
+      max_loan_usd: 5,
+      max_loan_ngn: 7500,
+      color: 'blue',
+      features: [
+        'Max loan: $5 / ₦7,500',
+        'First loan interest-free',
+        'Basic support',
+        'Referral bonuses'
+      ]
+    },
+    {
+      name: 'Standard',
+      price_usd: 10,
+      price_ngn: 15000,
+      max_loan_usd: 15,
+      max_loan_ngn: 22500,
+      color: 'purple',
+      popular: true,
+      features: [
+        'Max loan: $15 / ₦22,500',
+        'First loan interest-free',
+        'Priority support',
+        'Higher referral bonuses'
+      ]
+    },
+    {
+      name: 'Premium',
+      price_usd: 30,
+      price_ngn: 45000,
+      max_loan_usd: 40,
+      max_loan_ngn: 60000,
+      color: 'green',
+      features: [
+        'Max loan: $40 / ₦60,000',
+        'First loan interest-free',
+        'VIP support',
+        'Maximum referral bonuses'
+      ]
+    }
+  ];
+
+  const handlePurchase = async (tierName: string) => {
+    setPurchaseLoading(true);
+    try {
+      const tier = tiers.find(t => t.name === tierName);
+      if (!tier) return;
+      
+      await api.purchaseMembership(user!.user.id, {
+        tier: tierName.toLowerCase(),
+        payment_method: 'crypto',
+        payment_currency: 'USD',
+        payment_amount: tier.price_usd
+      });
+      
+      const updatedMembership = await api.getMembership(user!.user.id);
+      setMembership(updatedMembership);
+      alert('Membership purchased successfully!');
+    } catch {
+      alert('Failed to purchase membership. Please try again.');
+    }finally {
+      setPurchaseLoading(false);
+    }
+  };
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <WagmiProvider config={config}>
-        <AppContent />
-      </WagmiProvider>
-    </QueryClientProvider>
-  )
-}
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-3xl font-bold text-gray-900">Choose Your Membership</h2>
+        <p className="mt-2 text-lg text-gray-600">
+          Unlock instant access to microloans with a one-time membership fee
+        </p>
+      </div>
 
-export default App
+      {membership?.has_membership && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+          <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-2" />
+          <p className="text-green-800">
+            You have an active <strong>{membership.tier_name}</strong> membership
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {tiers.map((tier) => (
+          <div
+            key={tier.name}
+            className={`relative bg-white rounded-lg shadow-lg overflow-hidden ${
+              tier.popular ? 'ring-2 ring-purple-600' : ''
+            }`}
+          >
+            {tier.popular && (
+              <div className="absolute top-0 right-0 bg-purple-600 text-white px-3 py-1 text-sm font-medium">
+                Most Popular
+              </div>
+            )}
+            
+            <div className="p-6">
+              <h3 className="text-2xl font-bold text-gray-900">{tier.name}</h3>
+              <div className="mt-4">
+                <span className="text-4xl font-bold">${tier.price_usd}</span>
+                <span className="text-gray-600"> / ₦{tier.price_ngn.toLocaleString()}</span>
+              </div>
+              
+              <ul className="mt-6 space-y-3">
+                {tier.features.map((feature, index) => (
+                  <li key={index} className="flex items-start">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 mr-2 flex-shrink-0" />
+                    <span className="text-gray-700">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+              
+              <button
+                onClick={() => handlePurchase(tier.name)}
+                disabled={purchaseLoading || (membership?.has_membership && membership.tier === tier.name.toLowerCase())}
+                className={`mt-8 w-full py-3 px-4 rounded-md font-medium transition-colors ${
+                  membership?.has_membership && membership.tier === tier.name.toLowerCase()
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : `bg-${tier.color}-600 text-white hover:bg-${tier.color}-700`
+                }`}
+              >
+                {membership?.has_membership && membership.tier === tier.name.toLowerCase()
+                  ? 'Current Plan'
+                  : purchaseLoading
+                  ? 'Processing...'
+                  : 'Get Started'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const LoanSection = () => {
+  const { user } = useAuth();
+  const [membership, setMembership] = useState<Membership | null>(null);
+  const [showLoanForm, setShowLoanForm] = useState(false);
+  const [loanData, setLoanData] = useState({
+    amount_usd: '',
+    duration_days: 7,
+    collateral_crypto: 'ETH',
+    collateral_amount: '',
+    purpose: ''
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchMembership = async () => {
+      try {
+        const data = await api.getMembership(user!.user.id);
+        setMembership(data);
+      } catch (error) {
+        console.error('Error fetching membership:', error);
+      }
+    };
+
+    if (user) fetchMembership();
+  }, [user]);
+
+  const handleLoanRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const data = await api.requestLoan(user!.user.id, {
+        ...loanData,
+        amount_usd: parseFloat(loanData.amount_usd)
+      });
+      alert(`Loan requested successfully! Loan ID: ${data.loan_id}`);
+      setShowLoanForm(false);
+      setLoanData({
+        amount_usd: '',
+        duration_days: 7,
+        collateral_crypto: 'ETH',
+        collateral_amount: '',
+        purpose: ''
+      });
+    } catch {
+      alert('Failed to request loan. Please check your membership status.');
+    }finally {
+      setLoading(false);
+    }
+  };
+
+  if (!membership?.has_membership) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 text-center">
+        <AlertCircle className="h-12 w-12 text-yellow-600 mx-auto mb-4" />
+        <h3 className="text-xl font-bold text-gray-900 mb-2">Membership Required</h3>
+        <p className="text-gray-700 mb-4">
+          You need an active membership to request loans. 
+        </p>
+        <a
+          href="#membership"
+          className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
+        >
+          Get Membership <ChevronRight className="ml-2 h-4 w-4" />
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Request a Loan</h2>
+          <button
+            onClick={() => setShowLoanForm(!showLoanForm)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            {showLoanForm ? 'Cancel' : 'New Loan Request'}
+          </button>
+        </div>
+
+        {showLoanForm && (
+          <form onSubmit={handleLoanRequest} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Loan Amount (USD)
+              </label>
+              <input
+                type="number"
+                value={loanData.amount_usd}
+                onChange={(e) => setLoanData({...loanData, amount_usd: e.target.value})}
+                max={membership?.max_loan_usd}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={`Max: $${membership?.max_loan_usd}`}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Duration (Days)
+              </label>
+              <select
+                value={loanData.duration_days}
+                onChange={(e) => setLoanData({...loanData, duration_days: parseInt(e.target.value)})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={7}>7 Days</option>
+                <option value={14}>14 Days</option>
+                <option value={30}>30 Days</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Collateral Crypto
+              </label>
+              <select
+                value={loanData.collateral_crypto}
+                onChange={(e) => setLoanData({...loanData, collateral_crypto: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ETH">ETH</option>
+                <option value="BTC">BTC</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Collateral Amount
+              </label>
+              <input
+                type="number"
+                step="0.0001"
+                value={loanData.collateral_amount}
+                onChange={(e) => setLoanData({...loanData, collateral_amount: e.target.value})}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Purpose
+              </label>
+              <textarea
+                value={loanData.purpose}
+                onChange={(e) => setLoanData({...loanData, purpose: e.target.value})}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                placeholder="Describe the purpose of this loan..."
+              />
+            </div>
+
+            {!membership?.first_loan_used && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-green-800 text-sm">
+                  <CheckCircle className="inline h-4 w-4 mr-1" />
+                  This is your first loan - it will be <strong>interest-free!</strong>
+                </p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+            >
+              {loading ? 'Processing...' : 'Submit Loan Request'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LoginPage = () => {
+  const { login } = useAuth();
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    wallet_address: '',
+    password: ''
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        const data = await api.login({ email: formData.email });
+        login(data);
+      } else {
+        await api.register({
+          name: formData.name,
+          email: formData.email,
+          wallet_address: formData.wallet_address || undefined
+        });
+        const loginData = await api.login({ email: formData.email });
+        login(loginData);
+      }
+    } catch {
+      alert(isLogin ? 'Login failed. Please try again.' : 'Registration failed. Please try again.');
+    }finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center px-4">
+      <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            PushFundz
+          </h1>
+          <p className="mt-2 text-gray-600">
+            Instant crypto microloans for everyone
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                required={!isLogin}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {!isLogin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Wallet Address (Optional)
+              </label>
+              <input
+                type="text"
+                value={formData.wallet_address}
+                onChange={(e) => setFormData({...formData, wallet_address: e.target.value})}
+                placeholder="0x..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-md hover:from-blue-700 hover:to-purple-700 disabled:opacity-50"
+          >
+            {loading ? 'Processing...' : (isLogin ? 'Login' : 'Create Account')}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            {isLogin ? "Don't have an account? " : "Already have an account? "}
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              {isLogin ? 'Sign up' : 'Login'}
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const App = () => {
+  const { user, loading } = useAuth();
+  const [activeSection, setActiveSection] = useState('dashboard');
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeSection === 'dashboard' && <Dashboard />}
+        {activeSection === 'membership' && <MembershipSection />}
+        {activeSection === 'loans' && <LoanSection />}
+      </main>
+
+      <div className="fixed bottom-4 right-4 space-y-2">
+        <button
+          onClick={() => setActiveSection('dashboard')}
+          className={`p-3 rounded-full shadow-lg ${
+            activeSection === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'
+          }`}
+        >
+          <TrendingUp size={20} />
+        </button>
+        <button
+          onClick={() => setActiveSection('membership')}
+          className={`p-3 rounded-full shadow-lg ${
+            activeSection === 'membership' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'
+          }`}
+        >
+          <CreditCard size={20} />
+        </button>
+        <button
+          onClick={() => setActiveSection('loans')}
+          className={`p-3 rounded-full shadow-lg ${
+            activeSection === 'loans' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'
+          }`}
+        >
+          <DollarSign size={20} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default function PushFundzApp() {
+  return (
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  );
+}

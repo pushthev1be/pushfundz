@@ -13,6 +13,7 @@ import { Wallet } from 'lucide-react'
 import { WalletConnect } from './components/WalletConnect'
 import { PointsDisplay } from './components/PointsDisplay'
 import { AdminDashboard } from './components/AdminDashboard'
+import GamingHub from './components/GamingHub'
 import { useIsMobile } from './hooks/use-mobile'
 import { isValidWalletAddress, getAddressType } from './utils/walletValidation'
 import './App.css'
@@ -736,8 +737,8 @@ function AppContent() {
                 <TabsTrigger value="loans" className={isMobile ? 'text-xs py-2' : ''}>
                   {isMobile ? 'My Loans' : 'My Loans'}
                 </TabsTrigger>
-                <TabsTrigger value="earn" className={isMobile ? 'text-xs py-2' : ''}>
-                  {isMobile ? 'Earn' : 'Earn RP'}
+                <TabsTrigger value="gaming" className={isMobile ? 'text-xs py-2' : ''}>
+                  {isMobile ? 'Games' : 'Gaming Hub'}
                 </TabsTrigger>
                 <TabsTrigger value="points" className={isMobile ? 'text-xs py-2' : ''}>
                   {isMobile ? 'Points' : 'Points & Rewards'}
@@ -994,60 +995,8 @@ function AppContent() {
               </div>
             </TabsContent>
 
-            <TabsContent value="earn">
-              <div className="space-y-6">
-                {/* RP Economy Info */}
-                <div className="p-4 bg-white rounded-2xl shadow-md">
-                  <h2 className="text-xl font-bold mb-2">How RP Works</h2>
-                  <p className="text-sm mb-1">1 RP unlocks $0.05 of borrowing power (within your tier cap).</p>
-                  <p className="text-sm mb-1">Play games or buy RP bundles to grow faster and unlock higher borrowing limits.</p>
-                </div>
-
-                {/* Game Cards */}
-                <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-3'}`}>
-                  <GameCard
-                    title="Spin Wheel"
-                    icon="🎰"
-                    description="Stake 20–200 RP. Higher stakes = higher odds and rewards!"
-                    inputPlaceholder="Enter RP (20-200)"
-                    actionLabel={`Spin (${spinStake} RP)`}
-                    onAction={() => playSpin(spinStake)}
-                    inputValue={spinStake}
-                    onInputChange={(value: string) => setSpinStake(parseInt(value) || 50)}
-                    inputProps={{ min: "20", max: "200", type: "number" }}
-                  />
-                  <GameCard
-                    title="Rock Paper Scissors"
-                    icon="✊✋✌️"
-                    description="Costs 15 RP per play. Win to double your RP!"
-                    buttons={["🪨 Rock", "📄 Paper", "✂️ Scissors"]}
-                    onAction={(choice?: string) => choice && playRPS(choice.split(' ')[1].toLowerCase())}
-                  />
-                  <GameCard
-                    title="Whot (Nigerian Card Game)"
-                    icon="🃏"
-                    description="Costs 100 RP per match. Win 300 RP! Very hard CPU (12% win rate)."
-                    actionLabel="Play Whot"
-                    onAction={playWhot}
-                  />
-                </div>
-
-                {/* Daily RP Claim */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Daily RP Claim</CardTitle>
-                    <CardDescription>Claim your daily reputation points</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 mb-4">Claim 20 RP daily to fuel your games</p>
-                      <Button onClick={claimDailyRP} className={`${isMobile ? 'w-full py-4 text-lg' : ''}`}>
-                        Claim Daily RP
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            <TabsContent value="gaming">
+              <GamingHub userId={currentUser?.id} />
             </TabsContent>
 
             <TabsContent value="points">

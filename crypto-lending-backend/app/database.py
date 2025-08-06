@@ -28,6 +28,8 @@ class User(Base):
     tier = Column(Integer, default=0)  # 0=Bronze, 1=Silver, 2=Gold, 3=Platinum
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_admin = Column(Boolean, default=False)
+    hashed_password = Column(String, nullable=True)
     
     loans = relationship("Loan", back_populates="user")
     points_ledger = relationship("PointsLedger", back_populates="user")

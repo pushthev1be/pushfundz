@@ -9,9 +9,37 @@ import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
 from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction
 
+SECRET_KEY = "your-secret-key-here"  # Should be from environment
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def get_admin_user(db: Session = Depends(get_db)):
+    """Placeholder for admin user verification - implement proper JWT auth"""
+    return True  # Simplified for now
+from .routers import gaming
+from .auth import create_access_token, get_admin_user, pwd_context
+
 app = FastAPI(title="PushFundz Crypto Lending Platform", version="1.0.0")
+
+app.include_router(gaming.router)
 
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
@@ -761,6 +789,78 @@ async def play_whot_game(request: GameRequest, db: Session = Depends(get_db)):
         "rp_won": rp_won,
         "new_rp_balance": new_balance,
         "message": message
+    }
+
+# Admin endpoints
+@app.post("/api/admin/login")
+async def admin_login(credentials: dict, db: Session = Depends(get_db)):
+    """Admin login with email and password"""
+    email = credentials.get("email")
+    password = credentials.get("password")
+    
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    
+    user = db.query(DBUser).filter(DBUser.email == email).first()
+    if not user or not user.is_admin or not user.hashed_password:
+        raise HTTPException(status_code=403, detail="Invalid admin credentials")
+    
+    if not pwd_context.verify(password, user.hashed_password):
+        raise HTTPException(status_code=403, detail="Invalid admin credentials")
+    
+    access_token_expires = timedelta(minutes=30)
+    access_token = create_access_token(
+        data={"sub": str(user.id), "is_admin": True}, 
+        expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "is_admin": True
+        }
+    }
+
+@app.get("/api/admin/users")
+async def get_all_users(
+    admin: DBUser = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get all users (admin only)"""
+    users = db.query(DBUser).all()
+    return {
+        "users": [{
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "credit_score": user.credit_score,
+            "fiat_balance": user.fiat_balance,
+            "tier": user.tier,
+            "created_at": user.created_at.isoformat() if user.created_at else None
+        } for user in users]
+    }
+
+@app.get("/api/admin/loans/pending")
+async def get_pending_loans(
+    admin: DBUser = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get pending loans (admin only)"""
+    pending_loans = db.query(DBLoan).filter(DBLoan.status == "pending").all()
+    return {
+        "loans": [{
+            "id": str(loan.id),
+            "user_id": str(loan.user_id),
+            "amount_usd": loan.amount_usd,
+            "duration_days": loan.duration_days,
+            "interest_rate": loan.interest_rate,
+            "purpose": loan.purpose,
+            "created_at": loan.created_at.isoformat()
+        } for loan in pending_loans]
     }
 
 # Points system endpoint

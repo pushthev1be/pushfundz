@@ -1,0 +1,30 @@
+{
+  "name": "pushfundz-user-flow-test",
+  "version": "1.0.0",
+  "description": "Comprehensive user flow test suite for PushFundz crypto lending platform",
+  "main": "test-user-flow.js",
+  "scripts": {
+    "test": "node test-user-flow.js",
+    "test:dev": "API_URL=http://localhost:8000 GAMES_SERVICE_URL=http://localhost:3006 node test-user-flow.js",
+    "test:prod": "API_URL=https://api.pushfundz.com GAMES_SERVICE_URL=https://games.pushfundz.com node test-user-flow.js",
+    "start:backend": "cd crypto-lending-backend && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "start:frontend": "cd crypto-lending-frontend && npm run dev",
+    "start:games": "cd backend/microservices/games-service && npm start",
+    "install:all": "npm install && cd crypto-lending-frontend && npm install && cd ../backend/microservices/games-service && npm install"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "testing",
+    "user-flow",
+    "crypto-lending",
+    "pushfundz",
+    "api-testing"
+  ],
+  "author": "PushFundz Team",
+  "license": "MIT"
+}

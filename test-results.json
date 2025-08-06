@@ -1,0 +1,234 @@
+{
+  "timestamp": "2025-08-06T14:14:53.949Z",
+  "totalTests": 10,
+  "passedTests": 9,
+  "failedTests": 1,
+  "successRate": "90.0",
+  "results": [
+    {
+      "timestamp": "2025-08-06T14:14:53.863Z",
+      "type": "HEADER",
+      "message": "🚀 Starting PushFundz User Flow Test Suite"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.864Z",
+      "type": "HEADER",
+      "message": "=========================================="
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.864Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Health Check"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.864Z",
+      "type": "INFO",
+      "message": "Testing health check..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.884Z",
+      "type": "SUCCESS",
+      "message": "✅ Health check passed"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.884Z",
+      "type": "TEST",
+      "message": "\n📋 Running: User Registration"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.884Z",
+      "type": "INFO",
+      "message": "Testing user registration..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.895Z",
+      "type": "SUCCESS",
+      "message": "✅ User registration successful. User ID: eb60245f-5953-45f0-b8ba-75b1262855f3"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.895Z",
+      "type": "TEST",
+      "message": "\n📋 Running: User Login"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.895Z",
+      "type": "INFO",
+      "message": "Testing user login..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.900Z",
+      "type": "SUCCESS",
+      "message": "✅ User login successful"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.900Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Daily RP Claim"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.900Z",
+      "type": "INFO",
+      "message": "Testing daily RP claim..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.909Z",
+      "type": "SUCCESS",
+      "message": "✅ Daily RP claimed successfully. RP awarded: 38"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.909Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Rock Paper Scissors Game"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.909Z",
+      "type": "INFO",
+      "message": "Testing Rock Paper Scissors game..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.915Z",
+      "type": "SUCCESS",
+      "message": "✅ RPS game completed. Result: You win"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.915Z",
+      "type": "INFO",
+      "message": "RP won: 20, New balance: 58"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.915Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Spin Wheel Game"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.916Z",
+      "type": "INFO",
+      "message": "Testing Spin Wheel game..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.922Z",
+      "type": "SUCCESS",
+      "message": "✅ Spin wheel completed. Result: Nothing"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.922Z",
+      "type": "INFO",
+      "message": "RP won: 0, New balance: 8"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.922Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Whot Game"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.922Z",
+      "type": "INFO",
+      "message": "Testing Whot game..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.925Z",
+      "type": "ERROR",
+      "message": "❌ Whot game failed: Insufficient RP balance (minimum 15 RP required)"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.925Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Loan Request"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.925Z",
+      "type": "INFO",
+      "message": "Testing loan request..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.934Z",
+      "type": "SUCCESS",
+      "message": "✅ Loan request successful. Loan ID: b8056560-ab77-4cc5-851a-66610d29b31f"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.934Z",
+      "type": "TEST",
+      "message": "\n📋 Running: User Profile"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.934Z",
+      "type": "INFO",
+      "message": "Testing user profile retrieval..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.938Z",
+      "type": "SUCCESS",
+      "message": "✅ User profile retrieved successfully"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.938Z",
+      "type": "INFO",
+      "message": "Name: Test User"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.938Z",
+      "type": "INFO",
+      "message": "Email: testuser1754489693861@example.com"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.938Z",
+      "type": "INFO",
+      "message": "Credit score: 600"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.938Z",
+      "type": "TEST",
+      "message": "\n📋 Running: Platform Statistics"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.938Z",
+      "type": "INFO",
+      "message": "Testing platform statistics..."
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.948Z",
+      "type": "SUCCESS",
+      "message": "✅ Platform stats retrieved successfully"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "INFO",
+      "message": "Total users: 2"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "INFO",
+      "message": "Total loans: 1"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "HEADER",
+      "message": "\n📊 Test Summary"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "HEADER",
+      "message": "================"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "SUMMARY",
+      "message": "✅ Passed: 9/10"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "SUMMARY",
+      "message": "❌ Failed: 1/10"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "SUMMARY",
+      "message": "📈 Success Rate: 90.0%"
+    },
+    {
+      "timestamp": "2025-08-06T14:14:53.949Z",
+      "type": "WARNING",
+      "message": "\n⚠️  Some tests failed. Please check the logs above."
+    }
+  ]
+}

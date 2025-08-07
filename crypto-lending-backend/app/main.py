@@ -9,37 +9,13 @@ import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-
-from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction
-
-SECRET_KEY = "your-secret-key-here"  # Should be from environment
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-def get_admin_user(db: Session = Depends(get_db)):
-    """Placeholder for admin user verification - implement proper JWT auth"""
-    return True  # Simplified for now
-from .routers import gaming
-from .auth import create_access_token, get_admin_user, pwd_context
+from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction, Membership as DBMembership
+from .routers import memberships, loans, admin, gaming
+from .schemas import UserCreate, UserLogin, LoanStatus, StatsResponse
+from .config import MEMBERSHIP_TIERS, calculate_loan_terms
+from .auth import get_admin_user, create_access_token, pwd_context
 
 app = FastAPI(title="PushFundz Crypto Lending Platform", version="1.0.0")
-
-app.include_router(gaming.router)
 
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
@@ -50,9 +26,19 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# Include routers
+app.include_router(memberships.router)
+app.include_router(loans.router)
+app.include_router(admin.router)
+app.include_router(gaming.router)
+
 @app.on_event("startup")
 def startup_event():
     create_tables()
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
 
 class LoanStatus(str, Enum):
     PENDING = "pending"

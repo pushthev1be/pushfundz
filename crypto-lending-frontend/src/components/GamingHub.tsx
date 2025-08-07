@@ -45,7 +45,7 @@ const RPShop = ({ userId, onPurchase }: { userId: string, onPurchase: (amount: n
     { id: 'premium', name: 'Premium Pack', rp: 3000, price: 90, bonus: 600, popular: false }
   ];
 
-  const handlePurchase = async (bundleId) => {
+  const handlePurchase = async (bundleId: string) => {
     setLoading(true);
     try {
       const result = await rpApi.purchaseRP(userId, bundleId);
@@ -113,7 +113,7 @@ const RockPaperScissors = ({ userId, userRP, onGameResult }: { userId: string, u
     { id: 'scissors', name: 'Scissors', emoji: '✂️' }
   ];
 
-  const playGame = async (choice) => {
+  const playGame = async (choice: any) => {
     if (userRP < bet) {
       alert('Insufficient RP balance!');
       return;
@@ -239,7 +239,7 @@ const SpinWheel = ({ userId, userRP, onGameResult }: { userId: string, userRP: n
     try {
       const response = await rpApi.playGame(userId, 'wheel', {});
       const winSegment = segments.find(s => s.value === response.prize);
-      const segmentIndex = segments.indexOf(winSegment);
+      const segmentIndex = segments.indexOf(winSegment || segments[0]);
       
       const segmentAngle = 360 / segments.length;
       const finalRotation = 1440 + (segmentIndex * segmentAngle);
@@ -316,15 +316,12 @@ const WhotGame = ({ userId, userRP, onGameResult }: { userId: string, userRP: nu
   const [bet, setBet] = useState(50);
   const [gameState, setGameState] = useState('waiting');
   const [result, setResult] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-
   const playWhot = async () => {
     if (userRP < bet) {
       alert('Insufficient RP balance!');
       return;
     }
 
-    setLoading(true);
     setGameState('playing');
     
     try {
@@ -334,11 +331,9 @@ const WhotGame = ({ userId, userRP, onGameResult }: { userId: string, userRP: nu
         setResult(response);
         setGameState('result');
         onGameResult(response.rpChange);
-        setLoading(false);
       }, 2000);
     } catch (error) {
       console.error('Whot game failed:', error);
-      setLoading(false);
       setGameState('waiting');
     }
   };
@@ -512,15 +507,15 @@ const GamingHub = ({ userId }: { userId: string }) => {
     setLoading(false);
   };
 
-  const handleGameResult = (rpChange) => {
+  const handleGameResult = (rpChange: number) => {
     setUserRP(prev => prev + rpChange);
   };
 
-  const handlePurchase = (rpAmount) => {
+  const handlePurchase = (rpAmount: number) => {
     setUserRP(prev => prev + rpAmount);
   };
 
-  const handleRewardClaimed = (reward) => {
+  const handleRewardClaimed = (reward: number) => {
     setUserRP(prev => prev + reward);
   };
 

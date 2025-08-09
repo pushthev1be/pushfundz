@@ -8,10 +8,21 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./pushfundz.db")
 
-if DATABASE_URL.startswith("sqlite"):
+if not DATABASE_URL or DATABASE_URL.strip() == "":
+    print("Warning: DATABASE_URL not set or empty, using SQLite fallback")
+    DATABASE_URL = "sqlite:///./pushfundz.db"
+
+try:
+    if DATABASE_URL.startswith("sqlite"):
+        engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    else:
+        engine = create_engine(DATABASE_URL)
+except Exception as e:
+    print(f"Error creating database engine with URL: {DATABASE_URL}")
+    print(f"Error: {e}")
+    print("Falling back to SQLite database")
+    DATABASE_URL = "sqlite:///./pushfundz.db"
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-else:
-    engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

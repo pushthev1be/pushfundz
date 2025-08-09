@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: pushfundz-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: cd crypto-lending-backend && poetry install --no-dev
+    startCommand: cd crypto-lending-backend && poetry run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONPATH
+        value: /opt/render/project/src/crypto-lending-backend
+      - key: DATABASE_URL
+        generateValue: true
+        type: database

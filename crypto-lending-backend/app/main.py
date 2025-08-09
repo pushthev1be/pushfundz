@@ -26,6 +26,22 @@ app.add_middleware(
 def startup_event():
     create_tables()
 
+@app.get("/")
+async def root():
+    return {
+        "message": "PushFundz Crypto Lending API",
+        "status": "active",
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/healthz",
+            "api_docs": "/docs",
+            "stats": "/api/stats",
+            "users": "/api/users",
+            "loans": "/api/loans",
+            "memberships": "/api/memberships"
+        }
+    }
+
 class LoanStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"

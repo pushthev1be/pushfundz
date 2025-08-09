@@ -1,0 +1,18 @@
+[providers]
+providers = ["python"]
+
+[variables]
+PYTHONPATH = "/app/crypto-lending-backend"
+
+[phases.setup]
+nixPkgs = ["python312", "poetry"]
+
+[phases.install]
+cmds = [
+    "cd crypto-lending-backend",
+    "poetry config virtualenvs.create false",
+    "poetry install --no-dev"
+]
+
+[start]
+cmd = "cd crypto-lending-backend && poetry run uvicorn app.main:app --host 0.0.0.0 --port $PORT"

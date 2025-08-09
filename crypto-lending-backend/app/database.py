@@ -12,11 +12,25 @@ if not DATABASE_URL or DATABASE_URL.strip() == "":
     print("Warning: DATABASE_URL not set or empty, using SQLite fallback")
     DATABASE_URL = "sqlite:///./pushfundz.db"
 
+if DATABASE_URL.startswith("postgresql://"):
+    original_url = DATABASE_URL
+    psycopg3_url = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://")
+
 try:
     if DATABASE_URL.startswith("sqlite"):
         engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
     else:
-        engine = create_engine(DATABASE_URL)
+        try:
+            engine = create_engine(DATABASE_URL)
+            print(f"Successfully connected to PostgreSQL using psycopg2")
+        except Exception as psycopg2_error:
+            print(f"psycopg2 connection failed: {psycopg2_error}")
+            if 'psycopg3_url' in locals():
+                print("Trying psycopg3 format...")
+                engine = create_engine(psycopg3_url)
+                print(f"Successfully connected to PostgreSQL using psycopg3")
+            else:
+                raise psycopg2_error
 except Exception as e:
     print(f"Error creating database engine with URL: {DATABASE_URL}")
     print(f"Error: {e}")

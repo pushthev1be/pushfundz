@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 import uuid
 import httpx
@@ -9,7 +9,20 @@ import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction
+from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction, Membership as DBMembership, UserMembership as DBUserMembership
+
+try:
+    import stripe
+except Exception:
+    stripe = None
+
+from .config import PAYMENT_PROCESSOR, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPPORTED_CURRENCIES
+
+if PAYMENT_PROCESSOR == "stripe" and STRIPE_SECRET_KEY and stripe is not None:
+    try:
+        stripe.api_key = STRIPE_SECRET_KEY
+    except Exception:
+        pass
 
 app = FastAPI(title="PushFundz Crypto Lending Platform", version="1.0.0")
 
@@ -25,13 +38,32 @@ app.add_middleware(
 @app.on_event("startup")
 def startup_event():
     create_tables()
+    db = next(get_db())
+    try:
+        if db.query(DBMembership).count() == 0:
+            tiers = [
+                {"code": "starter", "name": "Starter", "price": 5.0, "currency": "USD", "loan_limit_usd": 100.0, "first_loan_interest_free": True, "benefits": "Basic access; first loan interest-free"},
+                {"code": "standard", "name": "Standard", "price": 15.0, "currency": "USD", "loan_limit_usd": 300.0, "first_loan_interest_free": False, "benefits": "Higher limits"},
+                {"code": "premium", "name": "Premium", "price": 30.0, "currency": "USD", "loan_limit_usd": 1000.0, "first_loan_interest_free": False, "benefits": "Highest limits and perks"},
+            ]
+            for t in tiers:
+                db.add(DBMembership(**t))
+            db.commit()
+    finally:
+
+        db.close()
 
 class LoanStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
-    ACTIVE = "active"
-    REPAID = "repaid"
-    DEFAULTED = "defaulted"
+class MembershipOut(BaseModel):
+    code: str
+    name: str
+    price: float
+    currency: str
+    loan_limit_usd: float
+    first_loan_interest_free: bool
+    benefits: Optional[str] = None
 
 class User(BaseModel):
     id: str
@@ -88,6 +120,12 @@ class UserLogin(BaseModel):
     email: Optional[str] = None
     wallet_address: Optional[str] = None
 
+class MembershipPurchase(BaseModel):
+    membership_code: str
+    currency: str = "USD"
+    email: Optional[str] = None
+    wallet_address: Optional[str] = None
+
 class PaymentRequest(BaseModel):
     loan_id: str
     payment_method: str
@@ -134,15 +172,36 @@ def update_credit_score(user_id: str, loan_repaid: bool, days_late: int = 0, db:
     
     if loan_repaid:
         if days_late == 0:
-            user.credit_score = min(850, user.credit_score + 50)  # Timely repayment
+            user.credit_score = min(850, user.credit_score + 50)
         elif days_late <= 7:
-            user.credit_score = min(850, user.credit_score + 25)  # Slightly late
+            user.credit_score = min(850, user.credit_score + 25)
         else:
-            user.credit_score = max(300, user.credit_score - 25)  # Late repayment
+            user.credit_score = max(300, user.credit_score - 25)
     else:
-        user.credit_score = max(300, user.credit_score - 100)  # Default
+        user.credit_score = max(300, user.credit_score - 100)
     
     db.commit()
+
+def get_active_membership(db: Session, user_id: uuid.UUID) -> Optional[DBUserMembership]:
+    now = datetime.utcnow()
+    return db.query(DBUserMembership)\
+        .filter(DBUserMembership.user_id == user_id, DBUserMembership.status == "active")\
+        .filter((DBUserMembership.expires_at == None) | (DBUserMembership.expires_at > now))\
+        .order_by(DBUserMembership.started_at.desc()).first()
+
+@app.get("/payments/success")
+def payments_success():
+    return {"status": "success"}
+
+@app.get("/payments/cancel")
+def payments_cancel():
+    return {"status": "canceled"}
+
+class PaymentCheckout(BaseModel):
+    purpose: str
+    amount: float
+    currency: str
+    meta: Optional[Dict] = None
 
 @app.get("/healthz")
 async def healthz():
@@ -178,9 +237,6 @@ async def register_user(user_data: UserRegistration, db: Session = Depends(get_d
 @app.post("/api/users/login")
 async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     """Login user with email or wallet address"""
-    if not login_data.email and not login_data.wallet_address:
-        raise HTTPException(status_code=400, detail="Email or wallet address required")
-    
     user = None
     if login_data.email:
         user = db.query(DBUser).filter(DBUser.email == login_data.email).first()
@@ -212,6 +268,25 @@ async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
         } for loan in user_loans],
         "message": "Login successful"
     }
+    if not login_data.email and not login_data.wallet_address:
+        raise HTTPException(status_code=400, detail="Email or wallet address required")
+@app.get("/api/memberships", response_model=List[MembershipOut])
+async def list_memberships(db: Session = Depends(get_db)):
+    tiers = db.query(DBMembership).all()
+    return [
+        MembershipOut(
+            code=t.code,
+            name=t.name,
+            price=t.price,
+            currency=t.currency,
+            loan_limit_usd=t.loan_limit_usd,
+            first_loan_interest_free=t.first_loan_interest_free,
+            benefits=t.benefits
+        ) for t in tiers
+    ]
+
+
+
 
 @app.get("/api/users/{user_id}")
 async def get_user(user_id: str, db: Session = Depends(get_db)):
@@ -245,11 +320,17 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/loans/request")
 async def request_loan(loan_request: LoanRequest, user_id: str, db: Session = Depends(get_db)):
-    """Request a new loan"""
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    active = get_active_membership(db, user.id)
+    if not active:
+        raise HTTPException(status_code=403, detail="Active membership required to request a loan")
+    tier = db.query(DBMembership).filter(DBMembership.id == active.membership_id).first()
+    if tier and loan_request.amount_usd > tier.loan_limit_usd:
+        raise HTTPException(status_code=400, detail=f"Amount exceeds membership limit of ${tier.loan_limit_usd}")
+
     interest_rate, collateral_percent = calculate_loan_terms(user.credit_score, loan_request.amount_usd)
     
     active_loans = db.query(DBLoan).filter(
@@ -286,6 +367,11 @@ async def request_loan(loan_request: LoanRequest, user_id: str, db: Session = De
         "collateral_requirement": f"{collateral_percent}%",
         "due_date": due_date.isoformat()
     }
+from .config import PAYMENT_PROCESSOR, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPPORTED_CURRENCIES, MERCHANT_WALLET_SOL, MERCHANT_WALLET_SOL_NETWORK, MERCHANT_WALLET_ETH, MERCHANT_WALLET_ETH_NETWORK
+try:
+    import stripe  # type: ignore
+except Exception:
+    stripe = None
 
 @app.get("/api/loans/{loan_id}")
 async def get_loan(loan_id: str, db: Session = Depends(get_db)):
@@ -324,42 +410,134 @@ async def approve_loan(loan_id: str, db: Session = Depends(get_db)):
     
     return {"message": "Loan approved successfully"}
 
-@app.post("/api/payments/process")
-async def process_payment(payment: PaymentRequest, db: Session = Depends(get_db)):
-    """Process loan payment with local currency"""
-    loan = db.query(DBLoan).filter(DBLoan.id == uuid.UUID(payment.loan_id)).first()
-    if not loan:
-        raise HTTPException(status_code=404, detail="Loan not found")
-    
-    if loan.status != LoanStatus.APPROVED.value:
-        raise HTTPException(status_code=400, detail="Loan is not approved for payment")
-    
-    new_transaction = DBTransaction(
-        user_id=loan.user_id,
-        loan_id=payment.loan_id,
-        transaction_type="fiat_deposit",
-        amount=payment.amount_local,
-        currency=payment.local_currency,
-        status="completed"
-    )
-    
-    db.add(new_transaction)
-    
-    loan.status = LoanStatus.ACTIVE.value
-    
-    user = db.query(DBUser).filter(DBUser.id == loan.user_id).first()
-    if user:
-        user.fiat_balance -= payment.amount_local  # Make balance negative
-    
-    db.commit()
-    db.refresh(new_transaction)
-    
-    return {
-        "transaction_id": str(new_transaction.id),
-        "message": "Payment processed successfully - loan disbursed",
-        "loan_status": "active",
-        "new_wallet_balance": user.fiat_balance if user else None
+@app.post("/api/memberships/purchase")
+async def purchase_membership(user_id: str, body: MembershipPurchase, db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    tier = db.query(DBMembership).filter(DBMembership.code == body.membership_code).first()
+    if not tier:
+        raise HTTPException(status_code=404, detail="Membership not found")
+    checkout_body = {
+        "purpose": "membership",
+        "amount": tier.price,
+        "currency": tier.currency.upper(),
+        "meta": {"user_id": str(user.id), "membership_code": tier.code},
     }
+    return create_checkout_session(checkout_body)
+def create_checkout_session(body: Dict):
+    if PAYMENT_PROCESSOR != "stripe":
+        raise HTTPException(status_code=400, detail="Stripe not configured")
+    if "USD" not in (SUPPORTED_CURRENCIES or ["USD"]):
+        raise HTTPException(status_code=400, detail="Unsupported currency")
+    purpose = body.get("purpose")
+    amount = float(body.get("amount", 0))
+    currency = (body.get("currency") or "USD").upper()
+    meta = body.get("meta") or {}
+    user_id = meta.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id required in meta")
+    cents = int(round(amount * 100))
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            success_url="https://pushfundz.onrender.com/payments/success",
+            cancel_url="https://pushfundz.onrender.com/payments/cancel",
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": currency.lower(),
+                        "product_data": {"name": f"{purpose}".replace("_", " ").title()},
+                        "unit_amount": cents,
+                    },
+                    "quantity": 1,
+                }
+            ],
+            metadata={
+                "purpose": purpose,
+                "user_id": user_id,
+                "membership_code": meta.get("membership_code") or "",
+                "loan_id": meta.get("loan_id") or "",
+                "rp_bundle": meta.get("rp_bundle") or "",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+    db = next(get_db())
+    try:
+        tx = DBTransaction(
+            user_id=uuid.UUID(user_id),
+            amount=amount,
+            currency=currency,
+            status="pending",
+            external_tx_id=session.id,
+            purpose=purpose,
+            created_at=datetime.utcnow(),
+        )
+        db.add(tx)
+        db.commit()
+        return {"checkout_url": session.url, "transaction_id": str(tx.id)}
+    finally:
+        db.close()
+
+@app.post("/api/payments/checkout")
+async def payments_checkout(body: PaymentCheckout):
+    return create_checkout_session(body.model_dump())
+
+
+@app.post("/api/payments/process")
+async def process_payment(payment: PaymentRequest):
+    raise HTTPException(status_code=410, detail="Deprecated. Use /api/payments/checkout")
+
+@app.post("/api/payments/webhook")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    if PAYMENT_PROCESSOR != "stripe":
+        return {"status": "ignored"}
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    if stripe is None or not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=payload, sig_header=sig_header, secret=STRIPE_WEBHOOK_SECRET
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+
+    if event["type"] in ("checkout.session.completed", "payment_intent.succeeded"):
+        metadata = {}
+        ext_id = None
+        if event["type"] == "checkout.session.completed":
+            session_obj = event["data"]["object"]
+            metadata = session_obj.get("metadata") or {}
+            ext_id = session_obj.get("id")
+        else:
+            pi = event["data"]["object"]
+            metadata = pi.get("metadata") or {}
+            ext_id = pi.get("id")
+
+        if ext_id:
+            txn = db.query(DBTransaction).filter(DBTransaction.external_tx_id == ext_id).first()
+            if txn:
+                txn.status = "completed"
+                txn.completed_at = datetime.utcnow()
+                db.commit()
+                if metadata.get("purpose") == "membership":
+                    user_id = metadata.get("user_id")
+                    code = metadata.get("membership_code")
+                    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first() if user_id else None
+                    tier = db.query(DBMembership).filter(DBMembership.code == code).first() if code else None
+                    if user and tier:
+                        um = DBUserMembership(
+                            user_id=user.id,
+                            membership_id=tier.id,
+                            status="active",
+                            started_at=datetime.utcnow(),
+                            expires_at=datetime.utcnow() + timedelta(days=30)
+                        )
+                        db.add(um)
+                        db.commit()
+    return {"received": True}
 
 @app.post("/api/loans/{loan_id}/repay")
 async def repay_loan(loan_id: str, db: Session = Depends(get_db)):

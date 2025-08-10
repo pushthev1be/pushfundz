@@ -27,11 +27,13 @@ class User(Base):
     credit_score = Column(Integer, default=600)
     tier = Column(Integer, default=0)  # 0=Bronze, 1=Silver, 2=Gold, 3=Platinum
     created_at = Column(DateTime, default=datetime.utcnow)
+    role = Column(String, default="user")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     loans = relationship("Loan", back_populates="user")
     points_ledger = relationship("PointsLedger", back_populates="user")
     transactions = relationship("Transaction", back_populates="user")
+    memberships = relationship("UserMembership", back_populates="user")
 
 class Loan(Base):
     __tablename__ = "loans"
@@ -68,7 +70,31 @@ class PointsLedger(Base):
     event_timestamp = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="points_ledger")
+class Membership(Base):
+    __tablename__ = "memberships"
 
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    currency = Column(String, nullable=False)
+    loan_limit_usd = Column(Float, nullable=False)
+    first_loan_interest_free = Column(Boolean, default=False)
+    benefits = Column(Text, nullable=True)
+
+
+class UserMembership(Base):
+    __tablename__ = "user_memberships"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    membership_id = Column(Integer, ForeignKey("memberships.id"), nullable=False)
+    status = Column(String, default="active")
+    started_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="memberships")
+    membership = relationship("Membership")
 class Transaction(Base):
     __tablename__ = "transactions"
     
@@ -81,6 +107,9 @@ class Transaction(Base):
     status = Column(String, default="pending")  # pending, completed, failed
     external_tx_id = Column(String, nullable=True)  # Ramp/Transak transaction ID
     blockchain_tx_hash = Column(String, nullable=True)
+    purpose = Column(String, nullable=True)
+    chain = Column(String, nullable=True)
+    to_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
     

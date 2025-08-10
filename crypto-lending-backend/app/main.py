@@ -9,6 +9,8 @@ import re
 from enum import Enum
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import jwt
+
 from .database import get_db, create_tables, User as DBUser, Loan as DBLoan, PointsLedger as DBPointsLedger, Transaction as DBTransaction, Membership as DBMembership, UserMembership as DBUserMembership
 
 try:
@@ -16,7 +18,7 @@ try:
 except Exception:
     stripe = None
 
-from .config import PAYMENT_PROCESSOR, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPPORTED_CURRENCIES
+from .config import PAYMENT_PROCESSOR, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPPORTED_CURRENCIES, SIGNING_SECRET, ADMIN_EMAIL
 
 if PAYMENT_PROCESSOR == "stripe" and STRIPE_SECRET_KEY and stripe is not None:
     try:
@@ -219,6 +221,25 @@ async def register_user(user_data: UserRegistration, db: Session = Depends(get_d
         if existing_wallet:
             raise HTTPException(status_code=400, detail="Wallet address already registered")
     
+@app.post("/api/auth/login")
+def login_user(payload: UserLogin, db: Session = Depends(get_db)):
+    if not payload.email:
+        raise HTTPException(status_code=400, detail="Email required")
+    user = db.query(DBUser).filter(DBUser.email == payload.email).first()
+    if not user:
+        user = DBUser(email=payload.email, name=payload.email.split("@")[0], wallet_address=None)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    if ADMIN_EMAIL and payload.email.lower() == ADMIN_EMAIL.lower():
+        user.role = "admin"
+        db.commit()
+    role = user.role or "user"
+    if not SIGNING_SECRET:
+        raise HTTPException(status_code=500, detail="Auth not configured")
+    token = jwt.encode({"sub": str(user.id), "email": user.email, "role": role, "iat": int(datetime.utcnow().timestamp())}, SIGNING_SECRET, algorithm="HS256")
+    return {"access_token": token, "token_type": "bearer", "user_id": str(user.id), "role": role}
+
     new_user = DBUser(
         name=user_data.name,
         email=user_data.email,
@@ -295,6 +316,19 @@ async def get_user(user_id: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+def require_admin(request: Request, db: Session = Depends(get_db)):
+    auth = request.headers.get("authorization") or request.headers.get("Authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth.split(" ", 1)[1]
+    try:
+        claims = jwt.decode(token, SIGNING_SECRET, algorithms=["HS256"])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if claims.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return claims
+
     user_loans = db.query(DBLoan).filter(DBLoan.user_id == uuid.UUID(user_id)).all()
     
     return {
@@ -367,7 +401,7 @@ async def request_loan(loan_request: LoanRequest, user_id: str, db: Session = De
         "collateral_requirement": f"{collateral_percent}%",
         "due_date": due_date.isoformat()
     }
-from .config import PAYMENT_PROCESSOR, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPPORTED_CURRENCIES, MERCHANT_WALLET_SOL, MERCHANT_WALLET_SOL_NETWORK, MERCHANT_WALLET_ETH, MERCHANT_WALLET_ETH_NETWORK
+from .config import PAYMENT_PROCESSOR, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPPORTED_CURRENCIES, SIGNING_SECRET, ADMIN_EMAIL, MERCHANT_WALLET_SOL, MERCHANT_WALLET_SOL_NETWORK, MERCHANT_WALLET_ETH, MERCHANT_WALLET_ETH_NETWORK
 try:
     import stripe  # type: ignore
 except Exception:
@@ -395,7 +429,7 @@ async def get_loan(loan_id: str, db: Session = Depends(get_db)):
     }
 
 @app.post("/api/loans/{loan_id}/approve")
-async def approve_loan(loan_id: str, db: Session = Depends(get_db)):
+async def approve_loan(loan_id: str, db: Session = Depends(get_db), _admin=Depends(require_admin)):
     """Approve a pending loan (admin function)"""
     loan = db.query(DBLoan).filter(DBLoan.id == uuid.UUID(loan_id)).first()
     if not loan:
@@ -720,7 +754,7 @@ async def buy_rp_bundle(user_id: str, purchase_data: RPBundlePurchase, request: 
     }
 
 @app.get("/api/admin/negative-balances")
-async def get_negative_balance_users(db: Session = Depends(get_db)):
+async def get_negative_balance_users(db: Session = Depends(get_db), _admin=Depends(require_admin)):
     """Get users with negative balances for admin monitoring"""
     negative_users = db.query(DBUser).filter(DBUser.fiat_balance < 0).all()
     

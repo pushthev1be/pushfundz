@@ -1,3 +1,4 @@
+from sqlalchemy import or_
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, validator
@@ -221,6 +222,19 @@ async def register_user(user_data: UserRegistration, db: Session = Depends(get_d
         if existing_wallet:
             raise HTTPException(status_code=400, detail="Wallet address already registered")
     
+    new_user = DBUser(
+        name=user_data.name,
+        email=user_data.email,
+        wallet_address=user_data.wallet_address,
+        credit_score=600,
+        fiat_balance=0.0,
+        tier=0
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"user_id": str(new_user.id), "message": "User registered successfully", "credit_score": 600}
+
 @app.post("/api/auth/login")
 def login_user(payload: UserLogin, db: Session = Depends(get_db)):
     if not payload.email:
@@ -240,57 +254,7 @@ def login_user(payload: UserLogin, db: Session = Depends(get_db)):
     token = jwt.encode({"sub": str(user.id), "email": user.email, "role": role, "iat": int(datetime.utcnow().timestamp())}, SIGNING_SECRET, algorithm="HS256")
     return {"access_token": token, "token_type": "bearer", "user_id": str(user.id), "role": role}
 
-    new_user = DBUser(
-        name=user_data.name,
-        email=user_data.email,
-        wallet_address=user_data.wallet_address,
-        credit_score=600,
-        fiat_balance=0.0,
-        tier=0
-    )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return {"user_id": str(new_user.id), "message": "User registered successfully", "credit_score": 600}
 
-@app.post("/api/users/login")
-async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
-    """Login user with email or wallet address"""
-    user = None
-    if login_data.email:
-        user = db.query(DBUser).filter(DBUser.email == login_data.email).first()
-    elif login_data.wallet_address:
-        user = db.query(DBUser).filter(DBUser.wallet_address == login_data.wallet_address).first()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    user_loans = db.query(DBLoan).filter(DBLoan.user_id == user.id).all()
-    
-    return {
-        "user": {
-            "id": str(user.id),
-            "name": user.name,
-            "email": user.email,
-            "wallet_address": user.wallet_address,
-            "credit_score": user.credit_score,
-            "fiat_balance": user.fiat_balance,
-            "tier": user.tier,
-            "created_at": user.created_at
-        },
-        "loans": [{
-            "id": str(loan.id),
-            "amount": loan.loan_amount,
-            "status": loan.status,
-            "created_at": loan.created_at,
-            "due_date": loan.due_date
-        } for loan in user_loans],
-        "message": "Login successful"
-    }
-    if not login_data.email and not login_data.wallet_address:
-        raise HTTPException(status_code=400, detail="Email or wallet address required")
 @app.get("/api/memberships", response_model=List[MembershipOut])
 async def list_memberships(db: Session = Depends(get_db)):
     tiers = db.query(DBMembership).all()
@@ -311,26 +275,10 @@ async def list_memberships(db: Session = Depends(get_db)):
 
 @app.get("/api/users/{user_id}")
 async def get_user(user_id: str, db: Session = Depends(get_db)):
-    """Get user profile"""
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-def require_admin(request: Request, db: Session = Depends(get_db)):
-    auth = request.headers.get("authorization") or request.headers.get("Authorization")
-    if not auth or not auth.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    token = auth.split(" ", 1)[1]
-    try:
-        claims = jwt.decode(token, SIGNING_SECRET, algorithms=["HS256"])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    if claims.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
-    return claims
-
     user_loans = db.query(DBLoan).filter(DBLoan.user_id == uuid.UUID(user_id)).all()
-    
     return {
         "user": {
             "id": str(user.id),
@@ -351,6 +299,41 @@ def require_admin(request: Request, db: Session = Depends(get_db)):
         } for loan in user_loans],
         "loan_count": len(user_loans)
     }
+@app.get("/api/users/{user_id}/membership")
+async def get_user_membership(user_id: str, db: Session = Depends(get_db)):
+    user = db.query(DBUser).filter(DBUser.id == uuid.UUID(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    um = db.query(DBUserMembership).filter(
+        DBUserMembership.user_id == uuid.UUID(user_id),
+        DBUserMembership.status == "active",
+        or_(DBUserMembership.expires_at.is_(None), DBUserMembership.expires_at > datetime.utcnow())
+    ).order_by(DBUserMembership.started_at.desc()).first()
+    if not um:
+        return {"active": False}
+    tier = db.query(DBMembership).filter(DBMembership.id == um.membership_id).first()
+    return {
+        "active": True,
+        "tier": {
+            "code": tier.code if tier else None,
+            "name": tier.name if tier else None,
+            "loan_limit_usd": tier.loan_limit_usd if tier else None,
+        },
+        "expires_at": um.expires_at
+    }
+
+def require_admin(request: Request, db: Session = Depends(get_db)):
+    auth = request.headers.get("authorization") or request.headers.get("Authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth.split(" ", 1)[1]
+    try:
+        claims = jwt.decode(token, SIGNING_SECRET, algorithms=["HS256"])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if claims.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return claims
 
 @app.post("/api/loans/request")
 async def request_loan(loan_request: LoanRequest, user_id: str, db: Session = Depends(get_db)):
@@ -853,41 +836,42 @@ async def claim_daily_rp(request: GameRequest, db: Session = Depends(get_db)):
 
 @app.post("/api/games/rps")
 async def play_rock_paper_scissors(request: RPSRequest, db: Session = Depends(get_db)):
-    """Play Rock Paper Scissors game"""
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
     current_rp = get_user_rp_balance(request.user_id, db)
-    if current_rp < 10:  # Minimum 10 RP to play
+    if current_rp < 10:
         raise HTTPException(status_code=400, detail="Insufficient RP balance (minimum 10 RP required)")
-    
     choices = ["rock", "paper", "scissors"]
     if request.choice.lower() not in choices:
         raise HTTPException(status_code=400, detail="Invalid choice. Must be rock, paper, or scissors")
-    
     player_choice = request.choice.lower()
-    computer_choice = random.choice(choices)
-    
-    # Determine winner
-    if player_choice == computer_choice:
-        result = "Tie"
-        rp_won = 0
-    elif (player_choice == "rock" and computer_choice == "scissors") or \
-         (player_choice == "paper" and computer_choice == "rock") or \
-         (player_choice == "scissors" and computer_choice == "paper"):
-        result = "You win"
-        rp_won = 20
-    else:
+    roll = random.randint(1, 100)
+    if roll <= 60:
+        if player_choice == "rock":
+            computer_choice = "paper"
+        elif player_choice == "paper":
+            computer_choice = "scissors"
+        else:
+            computer_choice = "rock"
         result = "You lose"
         rp_won = -10
-    
-    # Update RP balance
+    elif roll <= 90:
+        computer_choice = player_choice
+        result = "Tie"
+        rp_won = 0
+    else:
+        if player_choice == "rock":
+            computer_choice = "scissors"
+        elif player_choice == "paper":
+            computer_choice = "rock"
+        else:
+            computer_choice = "paper"
+        result = "You win"
+        rp_won = 20
     if rp_won != 0:
         add_rp_to_user(request.user_id, rp_won, "RPS_GAME", f"RPS: {result}", db)
-    
     new_balance = get_user_rp_balance(request.user_id, db)
-    
     return {
         "player_choice": player_choice,
         "computer_choice": computer_choice,
@@ -898,44 +882,31 @@ async def play_rock_paper_scissors(request: RPSRequest, db: Session = Depends(ge
 
 @app.post("/api/games/spin")
 async def play_spin_wheel(request: SpinRequest, db: Session = Depends(get_db)):
-    """Play spin wheel game"""
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
     current_rp = get_user_rp_balance(request.user_id, db)
     if current_rp < request.rp_stake:
         raise HTTPException(status_code=400, detail="Insufficient RP balance")
-    
-    # Deduct stake
     add_rp_to_user(request.user_id, -request.rp_stake, "SPIN_STAKE", f"Spin wheel stake: {request.rp_stake} RP", db)
-    
-    # Spin results with probabilities
     spin_results = [
-        {"result": "Nothing", "multiplier": 0, "probability": 40},
-        {"result": "Small Win", "multiplier": 1.5, "probability": 30},
-        {"result": "Big Win", "multiplier": 2.0, "probability": 20},
-        {"result": "Jackpot", "multiplier": 5.0, "probability": 10}
+        {"result": "Nothing", "multiplier": 0, "probability": 55},
+        {"result": "Small Win", "multiplier": 1.25, "probability": 28},
+        {"result": "Big Win", "multiplier": 1.75, "probability": 14},
+        {"result": "Jackpot", "multiplier": 3.0, "probability": 3}
     ]
-    
-    # Weighted random selection
     rand = random.randint(1, 100)
     cumulative = 0
     selected_result = spin_results[0]
-    
     for result in spin_results:
         cumulative += result["probability"]
         if rand <= cumulative:
             selected_result = result
             break
-    
     rp_won = int(request.rp_stake * selected_result["multiplier"])
-    
     if rp_won > 0:
         add_rp_to_user(request.user_id, rp_won, "SPIN_WIN", f"Spin wheel win: {selected_result['result']}", db)
-    
     new_balance = get_user_rp_balance(request.user_id, db)
-    
     return {
         "result": selected_result["result"],
         "rp_won": rp_won,
@@ -944,18 +915,13 @@ async def play_spin_wheel(request: SpinRequest, db: Session = Depends(get_db)):
 
 @app.post("/api/games/whot")
 async def play_whot_game(request: GameRequest, db: Session = Depends(get_db)):
-    """Play Whot card game against CPU"""
     user = db.query(DBUser).filter(DBUser.id == uuid.UUID(request.user_id)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
     current_rp = get_user_rp_balance(request.user_id, db)
-    if current_rp < 15:  # Minimum 15 RP to play
+    if current_rp < 15:
         raise HTTPException(status_code=400, detail="Insufficient RP balance (minimum 15 RP required)")
-    
-    # Simple Whot simulation (60% win rate for player)
-    player_wins = random.random() < 0.6
-    
+    player_wins = random.random() < 0.12
     if player_wins:
         result = "You win"
         rp_won = 30
@@ -964,10 +930,8 @@ async def play_whot_game(request: GameRequest, db: Session = Depends(get_db)):
         result = "CPU wins"
         rp_won = -15
         message = "Better luck next time!"
-    
     add_rp_to_user(request.user_id, rp_won, "WHOT_GAME", f"Whot game: {result}", db)
     new_balance = get_user_rp_balance(request.user_id, db)
-    
     return {
         "result": result,
         "rp_won": rp_won,

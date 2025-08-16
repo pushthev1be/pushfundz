@@ -1,3 +1,4 @@
+import { getAuth, authHeader } from '../utils/auth';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,10 @@ interface UserWithNegativeBalance {
 }
 
 export function AdminDashboard() {
+  const { role } = getAuth();
+  if (role !== 'admin') {
+    return <div className="text-sm text-gray-500">Admin only</div>;
+  }
   const [negativeBalanceUsers, setNegativeBalanceUsers] = useState<UserWithNegativeBalance[]>([]);
   const [stats, setStats] = useState({
     totalNegativeUsers: 0,
@@ -26,7 +31,7 @@ export function AdminDashboard() {
 
   const fetchNegativeBalanceUsers = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/negative-balances`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/admin/negative-balances`, { headers: authHeader() as any });
       if (response.ok) {
         const data = await response.json();
         setNegativeBalanceUsers(data.users);

@@ -1,3 +1,4 @@
+import { saveAuth, getAuth } from './utils/auth';
 import { useState, useEffect } from 'react'
 import { WagmiProvider, useAccount, useConnect } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -224,10 +225,10 @@ function AppContent() {
     setSuccess('')
 
     try {
-      const response = await fetch(`${API_URL}/api/users/login`, {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loginForm)
+        body: JSON.stringify({ email: loginForm.email || regForm.email })
       })
 
       const data = await response.json()
@@ -236,10 +237,15 @@ function AppContent() {
         throw new Error(data.detail || 'Login failed')
       }
 
-      setSuccess('Login successful!')
-      setCurrentUser(data.user)
-      setUserLoans(data.loans)
+      if (data.access_token && data.user_id) {
+        saveAuth(data.access_token, data.role || 'user', data.user_id)
+        const userResponse = await fetch(`${API_URL}/api/users/${data.user_id}`)
+        const userData = await userResponse.json()
+        setCurrentUser(userData.user)
+        setUserLoans(userData.loans)
+      }
 
+      setSuccess('Login successful!')
       setLoginForm({ email: '', wallet_address: '' })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed')
@@ -301,35 +307,32 @@ function AppContent() {
     setSuccess('')
 
     try {
-      const response = await fetch(`${API_URL}/api/payments/process`, {
+      if (!currentUser) {
+        throw new Error('Please login first')
+      }
+      const amount = parseFloat(paymentForm.amount_local || '0')
+      if (!paymentForm.loan_id || !amount) {
+        throw new Error('Enter loan ID and amount')
+      }
+      const response = await fetch(`${API_URL}/api/payments/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...paymentForm,
-          amount_local: parseFloat(paymentForm.amount_local)
+          purpose: 'loan_payment',
+          amount,
+          currency: paymentForm.local_currency || 'USD',
+          meta: { user_id: currentUser.id, loan_id: paymentForm.loan_id }
         })
       })
-
       const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data.detail || 'Payment processing failed')
+        throw new Error(data.detail || 'Failed to create checkout')
       }
-
-      setSuccess('Payment processed successfully! Your loan is now active.')
-
-      if (currentUser) {
-        const userResponse = await fetch(`${API_URL}/api/users/${currentUser.id}`)
-        const userData = await userResponse.json()
-        setUserLoans(userData.loans)
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url
+        return
       }
-
-      setPaymentForm({
-        loan_id: '',
-        payment_method: 'bank_transfer',
-        local_currency: 'USD',
-        amount_local: ''
-      })
+      setSuccess('Payment initiated.')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Payment processing failed')
     } finally {
@@ -1067,7 +1070,11 @@ function AppContent() {
             </TabsContent>
 
             <TabsContent value="admin">
-              <AdminDashboard />
+              {getAuth().role === 'admin' ? (
+                <AdminDashboard />
+              ) : (
+                <div className="text-[#a0a3bd] text-center py-8">Admin only</div>
+              )}
             </TabsContent>
           </Tabs>
           </div>

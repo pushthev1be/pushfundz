@@ -49,3 +49,34 @@ Security
 Links
 - PR: https://github.com/pushthev1be/pushfundz/pull/4
 - Link to Devin run: https://app.devin.ai/sessions/b7ddef165c7346dcb642e5113dd0abc0
+
+## Deploy on Render (Backend)
+
+1) Set environment variables (Render → Service → Environment):
+- PAYMENT_PROCESSOR=stripe
+- STRIPE_SECRET_KEY
+- STRIPE_WEBHOOK_SECRET
+- SUPPORTED_CURRENCIES=USD
+- MERCHANT_WALLET_SOL=5fruTPA9LFbbSS8GmbhELfv5o8zucRmCVnM7xp5kRCVd
+- MERCHANT_WALLET_SOL_NETWORK=mainnet
+- MERCHANT_WALLET_ETH=0x87b5DcB8D247960627963917685B6C0b8501Ba35
+- MERCHANT_WALLET_ETH_NETWORK=mainnet
+- SIGNING_SECRET=Generate a strong random string (>=32 chars)
+- ADMIN_EMAIL=admin email (matches the account you want as admin)
+
+2) Redeploy the backend.
+
+3) Stripe webhook (Dashboard → Developers → Webhooks):
+- Endpoint URL: https://pushfundz.onrender.com/api/payments/webhook
+- Events: checkout.session.completed, payment_intent.succeeded
+- Use your signing secret in STRIPE_WEBHOOK_SECRET
+
+4) Verify:
+- GET https://pushfundz.onrender.com/healthz returns {"status":"ok"}
+- GET https://pushfundz.onrender.com/api/memberships returns the seeded tiers
+- POST https://pushfundz.onrender.com/api/auth/login issues a JWT
+- POST /api/memberships/purchase redirects to Stripe Checkout; webhook activates membership
+
+Frontend:
+- Set VITE_API_URL=https://pushfundz.onrender.com
+- Build with pnpm build and deploy your static site as desired

@@ -2,7 +2,9 @@ Backend (FastAPI) - PushFundz
 
 Setup
 - Python 3.12
-- pip install -r requirements.txt
+- Install dependencies with Poetry:
+  - pip install poetry
+  - poetry install
 - Configure environment (Render or local) using .env.example:
   - PAYMENT_PROCESSOR=stripe
   - STRIPE_SECRET_KEY
